@@ -1,0 +1,29 @@
+{
+  "name": "staraltas-vue-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "fuser -k 3002/tcp 2>/dev/null || true; PORT=3002 nodemon server/src/index.js",
+    "dev:client": "VITE_API_BASE=http://127.0.0.1:3002/api vite --config client/vite.config.js --port 5173",
+    "build": "vite build --config client/vite.config.js",
+    "start": "node server/src/index.js"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "@staratlas/data-source": "^0.7.6",
+    "@staratlas/galactic-marketplace": "^0.12.3",
+    "bs58": "^6.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.1.2",
+    "nodemon": "^3.1.9",
+    "vite": "^6.2.0"
+  }
+}
