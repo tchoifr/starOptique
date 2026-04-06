@@ -1,4 +1,19 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+function resolveApiBase() {
+  const rawBase = String(import.meta.env.VITE_API_BASE || '/api').trim();
+
+  if (!rawBase) {
+    return '/api';
+  }
+
+  if (/^https?:\/\//i.test(rawBase)) {
+    return rawBase.replace(/\/+$/, '');
+  }
+
+  const normalizedPath = rawBase.startsWith('/') ? rawBase : `/${rawBase}`;
+  return normalizedPath.replace(/\/+$/, '');
+}
+
+const API_BASE = resolveApiBase();
 
 async function request(path) {
   const response = await fetch(`${API_BASE}${path}`);
