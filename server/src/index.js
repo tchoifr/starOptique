@@ -27,5 +27,5 @@ app.use((error, _req, res, _next) => {
 });
 
 app.listen(config.port, () => {
-  console.log(`Star Atlas Vue Node server listening on http://127.0.0.1:${config.port}`);
+  console.log(`StarVision server listening on http://127.0.0.1:${config.port}`);
 });
