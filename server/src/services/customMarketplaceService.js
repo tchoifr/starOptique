@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { getItemsCatalog } from './catalogService.js';
 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-const LISTING_ACCOUNT_SIZE = 122;
+const LISTING_ACCOUNT_SIZE = 130;
 const LISTING_STATUS_ACTIVE = 0;
 const LISTING_DISCRIMINATOR = Uint8Array.from([88, 16, 97, 53, 198, 205, 24, 41]);
 const CONFIG_ACCOUNT_DISCRIMINATOR = Uint8Array.from([155, 12, 170, 224, 30, 250, 204, 130]);
@@ -61,8 +61,9 @@ function parseListingAccount(account) {
     vault: base58Encode(raw.subarray(72, 104)),
     priceBaseUnits: readUnsignedLittleEndian64(raw.subarray(104, 112)),
     quantity: readUnsignedLittleEndian64(raw.subarray(112, 120)),
-    status: raw[120],
-    bump: raw[121],
+    listingNonce: readUnsignedLittleEndian64(raw.subarray(120, 128)),
+    status: raw[128],
+    bump: raw[129],
   };
 }
 
@@ -172,9 +173,11 @@ function normalizeWalletNfts(tokenAccounts, itemsByMint, activeListingsBySellerM
       listing: listing
         ? {
             listing: listing.listing,
+            vault: listing.vault,
             price: listing.price,
             priceBaseUnits: listing.priceBaseUnits,
             quantity: listing.quantity,
+            listingNonce: listing.listingNonce,
             quoteSymbol: 'USDC',
           }
         : null,
@@ -225,6 +228,7 @@ export async function getCustomListings({ owner = null } = {}) {
       const item = itemsByMint.get(listing.nftMint) || null;
       return {
         listing: listing.listing,
+        vault: listing.vault,
         seller: listing.seller,
         shipMint: listing.nftMint,
         shipName: item?.name || 'NFT inconnu',
@@ -238,6 +242,7 @@ export async function getCustomListings({ owner = null } = {}) {
         itemType: item?.itemType || null,
         priceBaseUnits: listing.priceBaseUnits,
         quantity: listing.quantity,
+        listingNonce: listing.listingNonce,
         price: toPrice(listing.priceBaseUnits, cfg.usdcDecimals),
         quoteSymbol: cfg.quoteSymbol,
         externalFloor: item?.market?.floor ?? null,

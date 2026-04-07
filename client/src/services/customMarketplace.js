@@ -40,13 +40,14 @@ function encodeU64(value) {
   return bytes;
 }
 
-function deriveListingPdas(programId, seller, nftMint) {
+function deriveListingPdas(programId, seller, nftMint, listingNonce) {
   const programPk = new PublicKey(programId);
   const sellerPk = new PublicKey(seller);
   const mintPk = new PublicKey(nftMint);
+  const nonceBytes = encodeU64(listingNonce);
 
   const [listingPda] = PublicKey.findProgramAddressSync(
-    [textEncoder.encode('listing'), sellerPk.toBuffer(), mintPk.toBuffer()],
+    [textEncoder.encode('listing'), sellerPk.toBuffer(), mintPk.toBuffer(), nonceBytes],
     programPk,
   );
   const [vaultPda] = PublicKey.findProgramAddressSync(
@@ -112,11 +113,16 @@ async function ensureAta({ connection, payer, owner, mint }) {
   return { ata, instruction };
 }
 
-export async function listNftWithPhantom({ nftMint, priceBaseUnits, quantity }) {
+export async function listNftWithPhantom({ nftMint, priceBaseUnits, quantity, listingNonce = BigInt(Date.now()) }) {
   const { provider, publicKey, marketConfig, connection } = await resolveContext();
   const seller = publicKey.toBase58();
   const mint = new PublicKey(nftMint);
-  const { listingPda, vaultPda } = deriveListingPdas(marketConfig.programId, seller, mint.toBase58());
+  const { listingPda, vaultPda } = deriveListingPdas(
+    marketConfig.programId,
+    seller,
+    mint.toBase58(),
+    listingNonce,
+  );
   const sellerNftAta = await getAssociatedTokenAddress(mint, publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 
   const instruction = new TransactionInstruction({
@@ -131,17 +137,23 @@ export async function listNftWithPhantom({ nftMint, priceBaseUnits, quantity }) 
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ],
-    data: concatBytes(LIST_NFT_DISCRIMINATOR, encodeU64(priceBaseUnits), encodeU64(quantity)),
+    data: concatBytes(
+      LIST_NFT_DISCRIMINATOR,
+      encodeU64(priceBaseUnits),
+      encodeU64(quantity),
+      encodeU64(listingNonce),
+    ),
   });
 
   return signAndSend(connection, provider, [instruction]);
 }
 
-export async function buyNftWithPhantom({ nftMint, seller }) {
+export async function buyNftWithPhantom({ nftMint, seller, listing, vault }) {
   const { provider, publicKey, marketConfig, connection } = await resolveContext();
   const mint = new PublicKey(nftMint);
   const sellerPk = new PublicKey(seller);
-  const { listingPda, vaultPda } = deriveListingPdas(marketConfig.programId, sellerPk.toBase58(), mint.toBase58());
+  const listingPda = new PublicKey(listing);
+  const vaultPda = new PublicKey(vault);
 
   const buyerNftAtaResult = await ensureAta({
     connection,
@@ -198,11 +210,11 @@ export async function buyNftWithPhantom({ nftMint, seller }) {
   return signAndSend(connection, provider, instructions);
 }
 
-export async function cancelNftListingWithPhantom({ nftMint }) {
+export async function cancelNftListingWithPhantom({ nftMint, listing, vault }) {
   const { provider, publicKey, marketConfig, connection } = await resolveContext();
-  const seller = publicKey.toBase58();
   const mint = new PublicKey(nftMint);
-  const { listingPda, vaultPda } = deriveListingPdas(marketConfig.programId, seller, mint.toBase58());
+  const listingPda = new PublicKey(listing);
+  const vaultPda = new PublicKey(vault);
   const sellerNftAta = await getAssociatedTokenAddress(mint, publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 
   const instruction = new TransactionInstruction({

@@ -157,11 +157,15 @@ async function submitListing(item) {
   }
 }
 
-async function cancelListing(item) {
+async function cancelListing(row) {
   resetMessages();
   actionLoading.value = true;
   try {
-    const signature = await cancelNftListingWithPhantom({ nftMint: item.mint });
+    const signature = await cancelNftListingWithPhantom({
+      nftMint: row.shipMint,
+      listing: row.listing,
+      vault: row.vault,
+    });
     success.value = `Listing annule: ${signature}`;
     await refreshAll();
   } catch (err) {
@@ -178,6 +182,8 @@ async function buyListing(row) {
     const signature = await buyNftWithPhantom({
       nftMint: row.shipMint,
       seller: row.seller,
+      listing: row.listing,
+      vault: row.vault,
     });
     success.value = `Achat confirme: ${signature}`;
     await refreshAll();
@@ -276,22 +282,12 @@ onMounted(async () => {
                     placeholder="Prix USDC"
                   />
                   <button
-                    v-if="!item.listed"
                     type="button"
                     class="badge-button"
                     :disabled="actionLoading"
                     @click="submitListing(item)"
                   >
                     Mettre en vente
-                  </button>
-                  <button
-                    v-else
-                    type="button"
-                    class="badge-button"
-                    :disabled="actionLoading"
-                    @click="cancelListing(item)"
-                  >
-                    Annuler listing
                   </button>
                 </div>
               </div>
@@ -315,6 +311,14 @@ onMounted(async () => {
                 <span class="muted">{{ formatPrice(row.price, row.quoteSymbol) }}</span>
                 <span class="muted">Floor externe: {{ formatPrice(row.externalFloor, row.externalFloorQuoteSymbol) }}</span>
               </div>
+              <button
+                type="button"
+                class="badge-button"
+                :disabled="actionLoading"
+                @click="cancelListing(row)"
+              >
+                Annuler listing
+              </button>
             </article>
           </div>
         </section>
