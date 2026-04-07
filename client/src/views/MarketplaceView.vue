@@ -180,7 +180,7 @@ onMounted(async () => {
       </div>
 
       <p v-if="marketConfig" class="muted marketplace-meta">
-        Programme custom: {{ shortAddress(marketConfig.programId) }} · Fee: {{ marketConfig.platformFeeBps / 100 }}% · Quote: {{ marketConfig.quoteSymbol }}
+        Programme custom: {{ shortAddress(marketConfig.programId) }} · Fee: {{ marketConfig.platformFeeBps / 100 }}% · Quote: {{ marketConfig.quoteSymbol }} · NFTs wallet lus sur mainnet-beta
       </p>
       <p v-if="error" class="marketplace-message error">{{ error }}</p>
       <p v-if="success" class="marketplace-message success">{{ success }}</p>

@@ -187,7 +187,7 @@ function normalizeWalletAddress(walletAddress) {
 }
 
 async function fetchWalletTokenAccounts(owner) {
-  const result = await callRpc(config.customMarketplaceRpcEndpoint, 'getTokenAccountsByOwner', [
+  const result = await callRpc(config.walletNftsRpcEndpoint, 'getTokenAccountsByOwner', [
     owner,
     { programId: TOKEN_PROGRAM_ID },
     { commitment: 'confirmed', encoding: 'jsonParsed' },

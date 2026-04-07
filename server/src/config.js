@@ -13,6 +13,7 @@ export const config = {
   rpcEndpoint: process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com',
   marketplaceProgramId: process.env.STARATLAS_MARKETPLACE_PROGRAM_ID || 'traderDnaR5w6Tcoi3NFm53i48FTDNbGjBSZwWXDRrg',
   customMarketplaceRpcEndpoint: process.env.CUSTOM_MARKETPLACE_RPC_ENDPOINT || 'https://api.devnet.solana.com',
+  walletNftsRpcEndpoint: process.env.WALLET_NFTS_RPC_ENDPOINT || process.env.SOLANA_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com',
   customMarketplaceProgramId: process.env.CUSTOM_MARKETPLACE_PROGRAM_ID || 'GvZVNMqEsUjwmT2HqPDrDazswvwU45diGMwD3mgQAzYv',
   customMarketplaceUsdcMint: process.env.CUSTOM_MARKETPLACE_USDC_MINT || '',
   customMarketplaceTreasury: process.env.CUSTOM_MARKETPLACE_TREASURY || '',
