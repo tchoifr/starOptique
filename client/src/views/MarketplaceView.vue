@@ -12,6 +12,7 @@ const marketConfig = ref(null);
 const listings = ref([]);
 const wallet = ref('');
 const walletItems = ref([]);
+const devnetWalletItems = ref([]);
 const error = ref('');
 const success = ref('');
 const loading = ref(true);
@@ -22,6 +23,7 @@ const priceInputs = ref({});
 const myListings = computed(() => listings.value.filter((row) => row.seller === wallet.value));
 const publicListings = computed(() => listings.value.filter((row) => row.seller !== wallet.value));
 const walletUnits = computed(() => walletItems.value.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0));
+const devnetWalletUnits = computed(() => devnetWalletItems.value.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0));
 
 function shortAddress(value) {
   return value ? `${value.slice(0, 4)}...${value.slice(-4)}` : 'n/a';
@@ -43,26 +45,37 @@ async function loadListings() {
   marketConfig.value = data.config || marketConfig.value;
 }
 
-async function loadWalletInventory() {
+function ensurePriceInputs(items) {
+  for (const item of items) {
+    if (!priceInputs.value[item.mint]) {
+      priceInputs.value[item.mint] = item.listing?.price ? String(item.listing.price) : '';
+    }
+  }
+}
+
+async function loadWalletInventories() {
   if (!wallet.value) {
     walletItems.value = [];
+    devnetWalletItems.value = [];
     return;
   }
 
   walletLoading.value = true;
   try {
-    const data = await api.getWalletNfts(wallet.value);
-    walletItems.value = data.items || [];
-    if (data.partial) {
-      error.value = 'Inventaire charge partiellement. Les NFTs sont visibles, mais certaines donnees annexes n ont pas repondu.';
-    }
-    for (const item of walletItems.value) {
-      if (!priceInputs.value[item.mint]) {
-        priceInputs.value[item.mint] = item.listing?.price ? String(item.listing.price) : '';
-      }
+    const [mainnetData, devnetData] = await Promise.all([
+      api.getWalletNfts(wallet.value),
+      api.getDevnetWalletNfts(wallet.value),
+    ]);
+
+    walletItems.value = mainnetData.items || [];
+    devnetWalletItems.value = devnetData.items || [];
+    ensurePriceInputs(devnetWalletItems.value);
+
+    if (mainnetData.partial || devnetData.partial) {
+      error.value = 'Inventaire charge partiellement. Certaines donnees annexes n ont pas repondu.';
     }
   } catch (err) {
-    error.value = err.message || 'Impossible de rafraichir tout l inventaire du wallet.';
+    error.value = err.message || 'Impossible de rafraichir les inventaires du wallet.';
   } finally {
     walletLoading.value = false;
   }
@@ -74,7 +87,7 @@ async function refreshAll() {
     marketConfig.value = await api.getMarketplaceConfig();
     await loadListings();
     if (wallet.value) {
-      await loadWalletInventory();
+      await loadWalletInventories();
     }
   } finally {
     loading.value = false;
@@ -87,7 +100,7 @@ async function connectWallet({ silent = false } = {}) {
     const { publicKey } = await connectPhantom({ onlyIfTrusted: silent });
     if (!publicKey) return;
     wallet.value = publicKey.toBase58();
-    await loadWalletInventory();
+    await loadWalletInventories();
   } catch (err) {
     if (!silent) {
       error.value = err.message || 'Connexion Phantom impossible.';
@@ -99,6 +112,7 @@ async function disconnectWalletAction() {
   await disconnectPhantom();
   wallet.value = '';
   walletItems.value = [];
+  devnetWalletItems.value = [];
   resetMessages();
 }
 
@@ -186,7 +200,7 @@ onMounted(async () => {
       </div>
 
       <p v-if="marketConfig" class="muted marketplace-meta">
-        Programme custom: {{ shortAddress(marketConfig.programId) }} · Fee: {{ marketConfig.platformFeeBps / 100 }}% · Quote: {{ marketConfig.quoteSymbol }} · NFTs wallet lus sur mainnet-beta
+        Programme custom: {{ shortAddress(marketConfig.programId) }} · Fee: {{ marketConfig.platformFeeBps / 100 }}% · Quote: {{ marketConfig.quoteSymbol }} · Inventaire reel sur mainnet-beta · Marketplace custom sur devnet
       </p>
       <p v-if="error" class="marketplace-message error">{{ error }}</p>
       <p v-if="success" class="marketplace-message success">{{ success }}</p>
@@ -194,18 +208,39 @@ onMounted(async () => {
       <div v-else class="marketplace-grid">
         <section class="marketplace-column">
           <div class="orders-header sell standalone">
-            <strong>Mes NFTs</strong>
+            <strong>Mes NFTs reels</strong>
             <span>{{ wallet ? walletItems.length : 0 }} mints · {{ walletUnits }} unites</span>
           </div>
           <div v-if="!wallet" class="loading-view">Connecte Phantom pour charger ton inventaire.</div>
-          <div v-else-if="walletLoading" class="loading-view">Chargement des NFTs du wallet…</div>
-          <div v-else-if="walletItems.length === 0" class="loading-view">Aucun NFT trouve sur ce wallet.</div>
+          <div v-else-if="walletLoading" class="loading-view">Chargement des NFTs mainnet…</div>
+          <div v-else-if="walletItems.length === 0" class="loading-view">Aucun NFT mainnet trouve sur ce wallet.</div>
+          <div v-else class="marketplace-card-list compact">
+            <article v-for="item in walletItems" :key="item.mint" class="marketplace-row panel">
+              <img v-if="item.image" :src="item.image" :alt="item.name" class="marketplace-row-image" />
+              <div class="marketplace-row-copy">
+                <strong>{{ item.name }}</strong>
+                <span class="muted">{{ item.manufacturer || item.category || 'Star Atlas' }} · {{ item.rarity || item.itemType || 'nft' }}</span>
+                <span class="muted">Quantite: {{ item.quantity || 1 }}</span>
+                <span class="muted">Mint: {{ shortAddress(item.mint) }}</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="marketplace-column">
+          <div class="orders-header sell standalone">
+            <strong>Mes NFTs devnet</strong>
+            <span>{{ wallet ? devnetWalletItems.length : 0 }} mints · {{ devnetWalletUnits }} unites</span>
+          </div>
+          <div v-if="!wallet" class="loading-view">Connecte Phantom pour charger ton inventaire devnet.</div>
+          <div v-else-if="walletLoading" class="loading-view">Chargement des NFTs devnet…</div>
+          <div v-else-if="devnetWalletItems.length === 0" class="loading-view">Aucun NFT devnet trouve sur ce wallet.</div>
           <div v-else class="marketplace-card-list">
-            <article v-for="item in walletItems" :key="item.mint" class="marketplace-card panel">
+            <article v-for="item in devnetWalletItems" :key="item.mint" class="marketplace-card panel">
               <img v-if="item.image" :src="item.image" :alt="item.name" class="marketplace-card-image" />
               <div class="marketplace-card-body">
                 <strong>{{ item.name }}</strong>
-                <span class="muted">{{ item.manufacturer || item.category || 'Star Atlas' }} · {{ item.rarity || item.itemType || 'nft' }}</span>
+                <span class="muted">{{ item.manufacturer || item.category || 'Custom devnet' }} · {{ item.rarity || item.itemType || 'nft' }}</span>
                 <span class="muted">Quantite: {{ item.quantity || 1 }}</span>
                 <span class="muted">Mint: {{ shortAddress(item.mint) }}</span>
                 <span class="muted">
@@ -245,7 +280,7 @@ onMounted(async () => {
 
         <section class="marketplace-column">
           <div class="orders-header buy standalone">
-            <strong>Mes listings</strong>
+            <strong>Mes listings devnet</strong>
             <span>{{ myListings.length }} lignes</span>
           </div>
           <div v-if="myListings.length === 0" class="loading-view">Aucun listing actif pour ce wallet.</div>
@@ -254,6 +289,7 @@ onMounted(async () => {
               <img v-if="row.shipImage" :src="row.shipImage" :alt="row.shipName" class="marketplace-row-image" />
               <div class="marketplace-row-copy">
                 <strong>{{ row.shipName }}</strong>
+                <span class="muted">Mint: {{ shortAddress(row.shipMint) }}</span>
                 <span class="muted">{{ formatPrice(row.price, row.quoteSymbol) }}</span>
                 <span class="muted">Floor externe: {{ formatPrice(row.externalFloor, row.externalFloorQuoteSymbol) }}</span>
               </div>
@@ -263,7 +299,7 @@ onMounted(async () => {
 
         <section class="marketplace-column">
           <div class="orders-header buy standalone">
-            <strong>Listings du marche</strong>
+            <strong>Listings du marche devnet</strong>
             <span>{{ publicListings.length }} lignes</span>
           </div>
           <div v-if="publicListings.length === 0" class="loading-view">Aucun listing custom actif.</div>
@@ -273,6 +309,7 @@ onMounted(async () => {
               <div class="marketplace-row-copy">
                 <strong>{{ row.shipName }}</strong>
                 <span class="muted">Vendeur: {{ shortAddress(row.seller) }}</span>
+                <span class="muted">Mint: {{ shortAddress(row.shipMint) }}</span>
                 <span class="muted">Prix: {{ formatPrice(row.price, row.quoteSymbol) }}</span>
                 <span class="muted">Floor Star Atlas: {{ formatPrice(row.externalFloor, row.externalFloorQuoteSymbol) }}</span>
               </div>

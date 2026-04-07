@@ -190,8 +190,8 @@ function normalizeWalletAddress(walletAddress) {
   }
 }
 
-async function fetchWalletTokenAccounts(owner) {
-  const result = await callRpc(config.walletNftsRpcEndpoint, 'getTokenAccountsByOwner', [
+async function fetchWalletTokenAccounts(owner, rpcEndpoint = config.walletNftsRpcEndpoint) {
+  const result = await callRpc(rpcEndpoint, 'getTokenAccountsByOwner', [
     owner,
     { programId: TOKEN_PROGRAM_ID },
     { commitment: 'confirmed', encoding: 'jsonParsed' },
@@ -246,7 +246,7 @@ export async function getCustomListings({ owner = null } = {}) {
   return { rows, config: cfg };
 }
 
-export async function getWalletNfts(walletAddress) {
+async function getWalletNftsForRpc(walletAddress, rpcEndpoint) {
   const owner = normalizeWalletAddress(walletAddress);
   if (!owner) {
     return { wallet: String(walletAddress || ''), items: [] };
@@ -255,7 +255,7 @@ export async function getWalletNfts(walletAddress) {
   const [itemsResult, listingsResult, tokenAccountsResult] = await Promise.allSettled([
     getItemsCatalog(),
     getCustomListings({ owner }),
-    fetchWalletTokenAccounts(owner),
+    fetchWalletTokenAccounts(owner, rpcEndpoint),
   ]);
 
   const items = itemsResult.status === 'fulfilled' ? itemsResult.value : [];
@@ -270,4 +270,12 @@ export async function getWalletNfts(walletAddress) {
     items: normalizeWalletNfts(tokenAccounts, itemsByMint, activeListingsBySellerMint),
     partial: itemsResult.status !== 'fulfilled' || listingsResult.status !== 'fulfilled' || tokenAccountsResult.status !== 'fulfilled',
   };
+}
+
+export async function getWalletNfts(walletAddress) {
+  return getWalletNftsForRpc(walletAddress, config.walletNftsRpcEndpoint);
+}
+
+export async function getDevnetWalletNfts(walletAddress) {
+  return getWalletNftsForRpc(walletAddress, config.customMarketplaceRpcEndpoint);
 }
