@@ -112,7 +112,7 @@ async function ensureAta({ connection, payer, owner, mint }) {
   return { ata, instruction };
 }
 
-export async function listNftWithPhantom({ nftMint, priceBaseUnits }) {
+export async function listNftWithPhantom({ nftMint, priceBaseUnits, quantity }) {
   const { provider, publicKey, marketConfig, connection } = await resolveContext();
   const seller = publicKey.toBase58();
   const mint = new PublicKey(nftMint);
@@ -131,7 +131,7 @@ export async function listNftWithPhantom({ nftMint, priceBaseUnits }) {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ],
-    data: concatBytes(LIST_NFT_DISCRIMINATOR, encodeU64(priceBaseUnits)),
+    data: concatBytes(LIST_NFT_DISCRIMINATOR, encodeU64(priceBaseUnits), encodeU64(quantity)),
   });
 
   return signAndSend(connection, provider, [instruction]);

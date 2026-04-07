@@ -19,6 +19,7 @@ const loading = ref(true);
 const walletLoading = ref(false);
 const actionLoading = ref(false);
 const priceInputs = ref({});
+const quantityInputs = ref({});
 
 const myListings = computed(() => listings.value.filter((row) => row.seller === wallet.value));
 const publicListings = computed(() => listings.value.filter((row) => row.seller !== wallet.value));
@@ -49,6 +50,9 @@ function ensurePriceInputs(items) {
   for (const item of items) {
     if (!priceInputs.value[item.mint]) {
       priceInputs.value[item.mint] = item.listing?.price ? String(item.listing.price) : '';
+    }
+    if (!quantityInputs.value[item.mint]) {
+      quantityInputs.value[item.mint] = item.listing?.quantity ? String(item.listing.quantity) : String(item.quantity || 1);
     }
   }
 }
@@ -125,14 +129,24 @@ function toBaseUnits(priceText) {
   return BigInt(Math.round(value * 10 ** decimals));
 }
 
+function toWholeQuantity(quantityText) {
+  const value = Number(String(quantityText || '').replace(',', '.'));
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error('Quantite invalide.');
+  }
+  return BigInt(value);
+}
+
 async function submitListing(item) {
   resetMessages();
   actionLoading.value = true;
   try {
     const priceBaseUnits = toBaseUnits(priceInputs.value[item.mint]);
+    const quantity = toWholeQuantity(quantityInputs.value[item.mint]);
     const signature = await listNftWithPhantom({
       nftMint: item.mint,
       priceBaseUnits,
+      quantity,
     });
     success.value = `Listing cree: ${signature}`;
     await refreshAll();
@@ -248,6 +262,13 @@ onMounted(async () => {
                 </span>
                 <div class="marketplace-inline-form">
                   <input
+                    v-model="quantityInputs[item.mint]"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Quantite"
+                  />
+                  <input
                     v-model="priceInputs[item.mint]"
                     type="number"
                     min="0"
@@ -289,6 +310,7 @@ onMounted(async () => {
               <img v-if="row.shipImage" :src="row.shipImage" :alt="row.shipName" class="marketplace-row-image" />
               <div class="marketplace-row-copy">
                 <strong>{{ row.shipName }}</strong>
+                <span class="muted">Quantite du lot: {{ row.quantity || 1 }}</span>
                 <span class="muted">Mint: {{ shortAddress(row.shipMint) }}</span>
                 <span class="muted">{{ formatPrice(row.price, row.quoteSymbol) }}</span>
                 <span class="muted">Floor externe: {{ formatPrice(row.externalFloor, row.externalFloorQuoteSymbol) }}</span>
@@ -309,6 +331,7 @@ onMounted(async () => {
               <div class="marketplace-row-copy">
                 <strong>{{ row.shipName }}</strong>
                 <span class="muted">Vendeur: {{ shortAddress(row.seller) }}</span>
+                <span class="muted">Quantite du lot: {{ row.quantity || 1 }}</span>
                 <span class="muted">Mint: {{ shortAddress(row.shipMint) }}</span>
                 <span class="muted">Prix: {{ formatPrice(row.price, row.quoteSymbol) }}</span>
                 <span class="muted">Floor Star Atlas: {{ formatPrice(row.externalFloor, row.externalFloorQuoteSymbol) }}</span>
