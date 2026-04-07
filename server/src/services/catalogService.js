@@ -15,6 +15,11 @@ function number(value) {
   return null;
 }
 
+function lower(value, fallback = 'unknown') {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  return value.trim().toLowerCase();
+}
+
 function extractAttributes(item) {
   const source = item.attributes ?? item.traits ?? [];
   const result = {};
@@ -173,49 +178,67 @@ function extractCatalogMarket(item) {
   };
 }
 
-function normalizeShip(item) {
+function normalizeCatalogItem(item) {
+  if (!item || typeof item !== 'object') return null;
+
   const attributes = extractAttributes(item);
-  const category = firstNonEmpty([
+  const category = lower(firstNonEmpty([
+    attributes.category,
     item.category,
     item.itemType,
-    attributes.category,
-    attributes.class,
-    attributes.type,
     attributes.itemtype,
-  ], 'Unknown');
-
-  if (!looksLikeShip(item, attributes, category)) {
-    return null;
-  }
-
-  const name = firstNonEmpty([item.name, item.title, attributes.name], 'Unknown ship');
+    attributes.type,
+    attributes.class,
+  ], 'unknown'));
+  const itemType = lower(firstNonEmpty([
+    item.itemType,
+    attributes.itemtype,
+    attributes.type,
+    item.category,
+  ], category));
+  const isShip = looksLikeShip(item, attributes, category);
+  const name = firstNonEmpty([item.name, item.title, attributes.name], 'Unknown item');
   const mint = firstNonEmpty([item.mint, item.mintAddress, item.id], `mint-${name}`);
+  const collection = item.collection && typeof item.collection === 'object' ? item.collection : null;
 
   return {
     mint,
+    symbol: firstNonEmpty([item.symbol], ''),
     name,
     description: firstNonEmpty([item.description], ''),
     image: firstNonEmpty([
       item.image,
       item.imageUrl,
       item.media?.image,
+      item.media?.thumbnailUrl,
       attributes.image_url,
-      'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80',
+      '',
+    ], ''),
+    thumbnail: firstNonEmpty([
+      item.media?.thumbnailUrl,
+      item.image,
+      item.imageUrl,
+      '',
     ], ''),
     faction: firstNonEmpty([item.faction, attributes.faction], 'Unknown faction'),
-    rarity: firstNonEmpty([item.rarity, attributes.rarity], 'Common').toLowerCase(),
+    rarity: lower(firstNonEmpty([item.rarity, attributes.rarity], 'common'), 'common'),
     category,
+    itemType,
     manufacturer: firstNonEmpty([item.manufacturer, attributes.manufacturer, attributes.make, attributes.brand], 'Unknown'),
-    spec: firstNonEmpty([attributes.spec, attributes.specification, item.spec], 'Unknown').toLowerCase(),
+    spec: lower(firstNonEmpty([attributes.spec, attributes.specification, item.spec], 'unknown')),
     size: normalizeShipSize(item, attributes),
+    className: lower(firstNonEmpty([attributes.class, item.class, item.itemClass], 'unknown')),
     tier: firstNonEmpty([attributes.tier, item.tier], 'Unknown'),
     crew: countCrewSlots(item, attributes),
     cargo: number(attributes.cargo ?? attributes.cargo_capacity ?? item.cargo),
     fuel: number(attributes.fuel ?? item.fuel),
     updatedAt: item.updatedAt ?? null,
     totalSupply: number(item.totalSupply),
+    collectionName: firstNonEmpty([collection?.name], ''),
+    collectionFamily: firstNonEmpty([collection?.family], ''),
     market: extractCatalogMarket(item),
     featuredInShowroom: false,
+    isShip,
   };
 }
 
@@ -247,35 +270,49 @@ async function loadFallbackSample() {
   }
 }
 
-export async function getShipsCatalog() {
-  return cache.getOrSet('catalog.ships', config.cacheTtlMs, async () => {
-    const catalogUrl = `${config.galaxyApiBase}${config.catalogEndpoint}`;
-    const showroomUrl = `${config.galaxyApiBase}${config.showroomEndpoint}`;
+async function loadRawCatalog() {
+  const catalogUrl = `${config.galaxyApiBase}${config.catalogEndpoint}`;
+  const showroomUrl = `${config.galaxyApiBase}${config.showroomEndpoint}`;
 
-    let rawItems = [];
-    let showroomMints = [];
+  let rawItems = [];
+  let showroomMints = [];
 
-    try {
-      const payload = await fetchJson(catalogUrl);
-      rawItems = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
-    } catch {
-      rawItems = await loadFallbackSample();
-    }
+  try {
+    const payload = await fetchJson(catalogUrl);
+    rawItems = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+  } catch {
+    rawItems = await loadFallbackSample();
+  }
 
-    try {
-      const payload = await fetchJson(showroomUrl);
-      showroomMints = Array.isArray(payload) ? payload.filter((value) => typeof value === 'string' && value.trim()) : [];
-    } catch {
-      showroomMints = [];
-    }
+  try {
+    const payload = await fetchJson(showroomUrl);
+    showroomMints = Array.isArray(payload) ? payload.filter((value) => typeof value === 'string' && value.trim()) : [];
+  } catch {
+    showroomMints = [];
+  }
 
+  return { rawItems, showroomMints };
+}
+
+export async function getItemsCatalog() {
+  return cache.getOrSet('catalog.items', config.cacheTtlMs, async () => {
+    const { rawItems, showroomMints } = await loadRawCatalog();
     const showroomSet = new Set(showroomMints);
-    const ships = rawItems.map(normalizeShip).filter(Boolean).map((ship) => ({
-      ...ship,
-      featuredInShowroom: showroomSet.has(ship.mint),
-    }));
 
-    ships.sort((a, b) => a.name.localeCompare(b.name));
-    return ships;
+    const items = rawItems
+      .map(normalizeCatalogItem)
+      .filter(Boolean)
+      .map((item) => ({
+        ...item,
+        featuredInShowroom: showroomSet.has(item.mint),
+      }));
+
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    return items;
   });
+}
+
+export async function getShipsCatalog() {
+  const items = await getItemsCatalog();
+  return items.filter((item) => item.isShip);
 }

@@ -1,7 +1,7 @@
 import bs58 from 'bs58';
 import { PublicKey } from '@solana/web3.js';
 import { config } from '../config.js';
-import { getShipsCatalog } from './catalogService.js';
+import { getItemsCatalog } from './catalogService.js';
 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 const LISTING_ACCOUNT_SIZE = 114;
@@ -202,7 +202,7 @@ export async function getCustomMarketplaceConfigView() {
 
 export async function getCustomListings({ owner = null } = {}) {
   const [ships, cfg, accounts] = await Promise.all([
-    getShipsCatalog(),
+    getItemsCatalog(),
     fetchCustomMarketplaceConfig(),
     fetchListingAccounts(),
   ]);
@@ -247,7 +247,7 @@ export async function getWalletNfts(walletAddress) {
   }
 
   const [ships, listings, tokenAccounts] = await Promise.all([
-    getShipsCatalog(),
+    getItemsCatalog(),
     getCustomListings({ owner }),
     fetchWalletTokenAccounts(owner),
   ]);
