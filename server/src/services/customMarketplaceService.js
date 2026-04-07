@@ -178,6 +178,24 @@ function normalizeWalletNfts(tokenAccounts, shipsByMint, activeListingsBySellerM
   return items.sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function normalizeWalletAddress(walletAddress) {
+  try {
+    return new PublicKey(String(walletAddress).trim()).toBase58();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWalletTokenAccounts(owner) {
+  const result = await callRpc(config.customMarketplaceRpcEndpoint, 'getTokenAccountsByOwner', [
+    owner,
+    { programId: TOKEN_PROGRAM_ID },
+    { commitment: 'confirmed', encoding: 'jsonParsed' },
+  ]);
+
+  return Array.isArray(result?.value) ? result.value : [];
+}
+
 export async function getCustomMarketplaceConfigView() {
   return fetchCustomMarketplaceConfig();
 }
@@ -223,15 +241,15 @@ export async function getCustomListings({ owner = null } = {}) {
 }
 
 export async function getWalletNfts(walletAddress) {
-  const owner = new PublicKey(String(walletAddress).trim()).toBase58();
+  const owner = normalizeWalletAddress(walletAddress);
+  if (!owner) {
+    return { wallet: String(walletAddress || ''), items: [] };
+  }
+
   const [ships, listings, tokenAccounts] = await Promise.all([
     getShipsCatalog(),
     getCustomListings({ owner }),
-    callRpc(config.customMarketplaceRpcEndpoint, 'getParsedTokenAccountsByOwner', [
-      owner,
-      { programId: TOKEN_PROGRAM_ID },
-      { commitment: 'confirmed' },
-    ]),
+    fetchWalletTokenAccounts(owner),
   ]);
 
   const shipsByMint = new Map(ships.map((ship) => [ship.mint, ship]));
@@ -241,6 +259,6 @@ export async function getWalletNfts(walletAddress) {
 
   return {
     wallet: owner,
-    items: normalizeWalletNfts(tokenAccounts?.value, shipsByMint, activeListingsBySellerMint),
+    items: normalizeWalletNfts(tokenAccounts, shipsByMint, activeListingsBySellerMint),
   };
 }
