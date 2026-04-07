@@ -21,6 +21,7 @@ const priceInputs = ref({});
 
 const myListings = computed(() => listings.value.filter((row) => row.seller === wallet.value));
 const publicListings = computed(() => listings.value.filter((row) => row.seller !== wallet.value));
+const walletUnits = computed(() => walletItems.value.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0));
 
 function shortAddress(value) {
   return value ? `${value.slice(0, 4)}...${value.slice(-4)}` : 'n/a';
@@ -52,11 +53,16 @@ async function loadWalletInventory() {
   try {
     const data = await api.getWalletNfts(wallet.value);
     walletItems.value = data.items || [];
+    if (data.partial) {
+      error.value = 'Inventaire charge partiellement. Les NFTs sont visibles, mais certaines donnees annexes n ont pas repondu.';
+    }
     for (const item of walletItems.value) {
       if (!priceInputs.value[item.mint]) {
         priceInputs.value[item.mint] = item.listing?.price ? String(item.listing.price) : '';
       }
     }
+  } catch (err) {
+    error.value = err.message || 'Impossible de rafraichir tout l inventaire du wallet.';
   } finally {
     walletLoading.value = false;
   }
@@ -189,7 +195,7 @@ onMounted(async () => {
         <section class="marketplace-column">
           <div class="orders-header sell standalone">
             <strong>Mes NFTs</strong>
-            <span>{{ wallet ? walletItems.length : 0 }} items</span>
+            <span>{{ wallet ? walletItems.length : 0 }} mints · {{ walletUnits }} unites</span>
           </div>
           <div v-if="!wallet" class="loading-view">Connecte Phantom pour charger ton inventaire.</div>
           <div v-else-if="walletLoading" class="loading-view">Chargement des NFTs du wallet…</div>
@@ -199,7 +205,8 @@ onMounted(async () => {
               <img v-if="item.image" :src="item.image" :alt="item.name" class="marketplace-card-image" />
               <div class="marketplace-card-body">
                 <strong>{{ item.name }}</strong>
-                <span class="muted">{{ item.manufacturer || 'Star Atlas' }} · {{ item.rarity || 'nft' }}</span>
+                <span class="muted">{{ item.manufacturer || item.category || 'Star Atlas' }} · {{ item.rarity || item.itemType || 'nft' }}</span>
+                <span class="muted">Quantite: {{ item.quantity || 1 }}</span>
                 <span class="muted">Mint: {{ shortAddress(item.mint) }}</span>
                 <span class="muted">
                   Star Atlas floor: {{ formatPrice(item.market?.floor, item.market?.floorQuoteSymbol || 'USDC') }}

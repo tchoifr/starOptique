@@ -25,7 +25,7 @@ function base58Encode(bytes) {
 
 async function callRpc(rpcEndpoint, method, params) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 8000);
   let response;
 
   try {
@@ -80,9 +80,7 @@ function parseConfigAccount(raw) {
 }
 
 function deriveConfigPda(programId) {
-  return PublicKey.findProgramAddressSync([
-    Buffer.from('config'),
-  ], new PublicKey(programId))[0].toBase58();
+  return PublicKey.findProgramAddressSync([Buffer.from('config')], new PublicKey(programId))[0].toBase58();
 }
 
 async function fetchCustomMarketplaceConfig() {
@@ -133,9 +131,8 @@ function toPrice(baseUnits, decimals = 6) {
   return Number((baseUnits / (10 ** decimals)).toFixed(decimals));
 }
 
-function normalizeWalletNfts(tokenAccounts, shipsByMint, activeListingsBySellerMint) {
-  const seen = new Set();
-  const items = [];
+function normalizeWalletNfts(tokenAccounts, itemsByMint, activeListingsBySellerMint) {
+  const aggregated = new Map();
 
   for (const account of Array.isArray(tokenAccounts) ? tokenAccounts : []) {
     const parsed = account?.account?.data?.parsed?.info;
@@ -146,23 +143,30 @@ function normalizeWalletNfts(tokenAccounts, shipsByMint, activeListingsBySellerM
 
     if (typeof mint !== 'string' || !mint.trim()) continue;
     if (amount < 1 || decimals !== 0) continue;
-    if (seen.has(mint)) continue;
-    seen.add(mint);
 
-    const ship = shipsByMint.get(mint) || null;
+    aggregated.set(mint, (aggregated.get(mint) || 0) + amount);
+  }
+
+  const items = [];
+
+  for (const [mint, quantity] of aggregated.entries()) {
+    const item = itemsByMint.get(mint) || null;
     const listing = activeListingsBySellerMint.get(mint) || null;
 
     items.push({
       mint,
-      name: ship?.name || 'NFT inconnu',
-      image: ship?.image || '',
-      description: ship?.description || '',
-      faction: ship?.faction || null,
-      rarity: ship?.rarity || null,
-      manufacturer: ship?.manufacturer || null,
-      spec: ship?.spec || null,
-      size: ship?.size || null,
-      market: ship?.market || null,
+      quantity,
+      name: item?.name || 'NFT inconnu',
+      image: item?.image || '',
+      description: item?.description || '',
+      faction: item?.faction || null,
+      rarity: item?.rarity || null,
+      manufacturer: item?.manufacturer || null,
+      category: item?.category || null,
+      itemType: item?.itemType || null,
+      spec: item?.spec || null,
+      size: item?.size || null,
+      market: item?.market || null,
       listed: Boolean(listing),
       listing: listing
         ? {
@@ -201,13 +205,13 @@ export async function getCustomMarketplaceConfigView() {
 }
 
 export async function getCustomListings({ owner = null } = {}) {
-  const [ships, cfg, accounts] = await Promise.all([
+  const [items, cfg, accounts] = await Promise.all([
     getItemsCatalog(),
     fetchCustomMarketplaceConfig(),
     fetchListingAccounts(),
   ]);
 
-  const shipsByMint = new Map(ships.map((ship) => [ship.mint, ship]));
+  const itemsByMint = new Map(items.map((item) => [item.mint, item]));
   const ownerFilter = typeof owner === 'string' && owner.trim() ? owner.trim() : null;
 
   const rows = accounts
@@ -216,23 +220,25 @@ export async function getCustomListings({ owner = null } = {}) {
     .filter((listing) => listing.status === LISTING_STATUS_ACTIVE)
     .filter((listing) => !ownerFilter || listing.seller === ownerFilter)
     .map((listing) => {
-      const ship = shipsByMint.get(listing.nftMint) || null;
+      const item = itemsByMint.get(listing.nftMint) || null;
       return {
         listing: listing.listing,
         seller: listing.seller,
         shipMint: listing.nftMint,
-        shipName: ship?.name || 'NFT inconnu',
-        shipImage: ship?.image || '',
-        description: ship?.description || '',
-        rarity: ship?.rarity || null,
-        manufacturer: ship?.manufacturer || null,
-        spec: ship?.spec || null,
-        size: ship?.size || null,
+        shipName: item?.name || 'NFT inconnu',
+        shipImage: item?.image || '',
+        description: item?.description || '',
+        rarity: item?.rarity || null,
+        manufacturer: item?.manufacturer || null,
+        spec: item?.spec || null,
+        size: item?.size || null,
+        category: item?.category || null,
+        itemType: item?.itemType || null,
         priceBaseUnits: listing.priceBaseUnits,
         price: toPrice(listing.priceBaseUnits, cfg.usdcDecimals),
         quoteSymbol: cfg.quoteSymbol,
-        externalFloor: ship?.market?.floor ?? null,
-        externalFloorQuoteSymbol: ship?.market?.floorQuoteSymbol ?? 'USDC',
+        externalFloor: item?.market?.floor ?? null,
+        externalFloorQuoteSymbol: item?.market?.floorQuoteSymbol ?? 'USDC',
       };
     })
     .sort((left, right) => (left.price ?? Number.MAX_SAFE_INTEGER) - (right.price ?? Number.MAX_SAFE_INTEGER) || left.shipName.localeCompare(right.shipName));
@@ -246,19 +252,22 @@ export async function getWalletNfts(walletAddress) {
     return { wallet: String(walletAddress || ''), items: [] };
   }
 
-  const [ships, listings, tokenAccounts] = await Promise.all([
+  const [itemsResult, listingsResult, tokenAccountsResult] = await Promise.allSettled([
     getItemsCatalog(),
     getCustomListings({ owner }),
     fetchWalletTokenAccounts(owner),
   ]);
 
-  const shipsByMint = new Map(ships.map((ship) => [ship.mint, ship]));
-  const activeListingsBySellerMint = new Map(
-    (listings?.rows || []).map((row) => [row.shipMint, row]),
-  );
+  const items = itemsResult.status === 'fulfilled' ? itemsResult.value : [];
+  const listings = listingsResult.status === 'fulfilled' ? listingsResult.value : { rows: [] };
+  const tokenAccounts = tokenAccountsResult.status === 'fulfilled' ? tokenAccountsResult.value : [];
+
+  const itemsByMint = new Map(items.map((item) => [item.mint, item]));
+  const activeListingsBySellerMint = new Map((listings?.rows || []).map((row) => [row.shipMint, row]));
 
   return {
     wallet: owner,
-    items: normalizeWalletNfts(tokenAccounts, shipsByMint, activeListingsBySellerMint),
+    items: normalizeWalletNfts(tokenAccounts, itemsByMint, activeListingsBySellerMint),
+    partial: itemsResult.status !== 'fulfilled' || listingsResult.status !== 'fulfilled' || tokenAccountsResult.status !== 'fulfilled',
   };
 }
