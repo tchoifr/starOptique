@@ -118,6 +118,9 @@ watch(() => [route.params.mint, route.query.sort], load, { immediate: true });
               <div class="hero-copy-wrap official-copy-wrap">
                 <h2>{{ data.ship.name }}</h2>
                 <p class="hero-subtitle">{{ formatSubtitle(data.ship) }}</p>
+                <div class="marketplace-actions-bar">
+                  <router-link class="badge-button linklike" to="/marketplace">Ouvrir mon marketplace</router-link>
+                </div>
               </div>
 
               <div class="hero-metadata-row">

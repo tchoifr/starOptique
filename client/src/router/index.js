@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import HomeView from '../views/HomeView.vue';
 import ShipView from '../views/ShipView.vue';
 import SellersView from '../views/SellersView.vue';
+import MarketplaceView from '../views/MarketplaceView.vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -9,6 +10,7 @@ const router = createRouter({
     { path: '/', name: 'home', component: HomeView },
     { path: '/ships/:mint', name: 'ship', component: ShipView, props: true },
     { path: '/orders/sellers', name: 'sellers', component: SellersView },
+    { path: '/marketplace', name: 'marketplace', component: MarketplaceView },
   ],
 });
 

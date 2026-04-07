@@ -11,6 +11,7 @@
     "start": "node server/src/index.js"
   },
   "dependencies": {
+    "@solana/spl-token": "^0.3.11",
     "@solana/web3.js": "^1.98.4",
     "@staratlas/data-source": "^0.7.6",
     "@staratlas/galactic-marketplace": "^0.12.3",

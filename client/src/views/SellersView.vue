@@ -110,7 +110,10 @@ onBeforeUnmount(() => {
           <h2>Tous les navires en vente</h2>
           <p class="muted">Liste des offres USDC triée du prix le plus bas au plus haut, avec option pour ne garder que le vendeur le moins cher par navire.</p>
         </div>
-        <button type="button" class="badge-button linklike" @click="goBack">Retour détail</button>
+        <div class="marketplace-actions-bar">
+          <router-link class="badge-button linklike" to="/marketplace">Mon marketplace</router-link>
+          <button type="button" class="badge-button linklike" @click="goBack">Retour détail</button>
+        </div>
       </div>
 
       <div v-if="loading" class="loading-view">Chargement…</div>

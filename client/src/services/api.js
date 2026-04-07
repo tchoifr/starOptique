@@ -15,8 +15,8 @@ function resolveApiBase() {
 
 const API_BASE = resolveApiBase();
 
-async function request(path) {
-  const response = await fetch(`${API_BASE}${path}`);
+async function request(path, init = undefined) {
+  const response = await fetch(`${API_BASE}${path}`, init);
   if (!response.ok) throw new Error(`API ${response.status}`);
   return response.json();
 }
@@ -30,5 +30,15 @@ export const api = {
   },
   getSellers(page = 1, perPage = 25, mode = 'all') {
     return request(`/orders/sellers?page=${page}&perPage=${perPage}&mode=${encodeURIComponent(mode)}`);
+  },
+  getMarketplaceConfig() {
+    return request('/marketplace/config');
+  },
+  getMarketplaceListings(owner = '') {
+    const suffix = owner ? `?owner=${encodeURIComponent(owner)}` : '';
+    return request(`/marketplace/listings${suffix}`);
+  },
+  getWalletNfts(address) {
+    return request(`/wallet/${encodeURIComponent(address)}/nfts`);
   },
 };

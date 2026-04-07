@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import { getShipDetail, getShipsSummary, getSellersPage } from '../services/marketService.js';
+import {
+  getCustomListings,
+  getCustomMarketplaceConfigView,
+  getWalletNfts,
+} from '../services/customMarketplaceService.js';
 
 export const apiRouter = Router();
 
@@ -33,6 +38,31 @@ apiRouter.get('/orders/sellers', async (req, res, next) => {
     const perPage = Number(req.query.perPage || 25);
     const mode = req.query.mode === 'lowest-per-ship' ? 'lowest-per-ship' : 'all';
     res.json(await getSellersPage(page, perPage, mode));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.get('/marketplace/config', async (_req, res, next) => {
+  try {
+    res.json(await getCustomMarketplaceConfigView());
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.get('/marketplace/listings', async (req, res, next) => {
+  try {
+    const owner = typeof req.query.owner === 'string' ? req.query.owner : null;
+    res.json(await getCustomListings({ owner }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.get('/wallet/:address/nfts', async (req, res, next) => {
+  try {
+    res.json(await getWalletNfts(req.params.address));
   } catch (error) {
     next(error);
   }
