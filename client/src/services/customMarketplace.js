@@ -86,7 +86,7 @@ async function signAndSend(connection, provider, instructions) {
   return signature;
 }
 
-async function ensureAta({ connection, provider, payer, owner, mint }) {
+async function ensureAta({ connection, payer, owner, mint }) {
   const ata = await getAssociatedTokenAddress(
     new PublicKey(mint),
     new PublicKey(owner),
@@ -96,7 +96,9 @@ async function ensureAta({ connection, provider, payer, owner, mint }) {
   );
 
   const info = await connection.getAccountInfo(ata, 'confirmed');
-  if (info) return ata;
+  if (info) {
+    return { ata, instruction: null };
+  }
 
   const instruction = createAssociatedTokenAccountInstruction(
     new PublicKey(payer),
@@ -107,8 +109,7 @@ async function ensureAta({ connection, provider, payer, owner, mint }) {
     ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
-  await signAndSend(connection, provider, [instruction]);
-  return ata;
+  return { ata, instruction };
 }
 
 export async function listNftWithPhantom({ nftMint, priceBaseUnits }) {
@@ -142,16 +143,14 @@ export async function buyNftWithPhantom({ nftMint, seller }) {
   const sellerPk = new PublicKey(seller);
   const { listingPda, vaultPda } = deriveListingPdas(marketConfig.programId, sellerPk.toBase58(), mint.toBase58());
 
-  const buyerNftAta = await ensureAta({
+  const buyerNftAtaResult = await ensureAta({
     connection,
-    provider,
     payer: publicKey,
     owner: publicKey,
     mint,
   });
-  const buyerUsdcAta = await ensureAta({
+  const buyerUsdcAtaResult = await ensureAta({
     connection,
-    provider,
     payer: publicKey,
     owner: publicKey,
     mint: marketConfig.usdcMint,
@@ -171,27 +170,32 @@ export async function buyNftWithPhantom({ nftMint, seller }) {
     ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
-  const instruction = new TransactionInstruction({
-    programId: new PublicKey(marketConfig.programId),
-    keys: [
-      { pubkey: publicKey, isSigner: true, isWritable: true },
-      { pubkey: sellerPk, isSigner: false, isWritable: true },
-      { pubkey: new PublicKey(marketConfig.configPda), isSigner: false, isWritable: false },
-      { pubkey: listingPda, isSigner: false, isWritable: true },
-      { pubkey: vaultPda, isSigner: false, isWritable: true },
-      { pubkey: buyerNftAta, isSigner: false, isWritable: true },
-      { pubkey: buyerUsdcAta, isSigner: false, isWritable: true },
-      { pubkey: sellerUsdcAta, isSigner: false, isWritable: true },
-      { pubkey: mint, isSigner: false, isWritable: false },
-      { pubkey: platformFeeAccount, isSigner: false, isWritable: true },
-      { pubkey: new PublicKey(marketConfig.usdcMint), isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    data: BUY_NFT_DISCRIMINATOR,
-  });
+  const instructions = [];
+  if (buyerNftAtaResult.instruction) instructions.push(buyerNftAtaResult.instruction);
+  if (buyerUsdcAtaResult.instruction) instructions.push(buyerUsdcAtaResult.instruction);
+  instructions.push(
+    new TransactionInstruction({
+      programId: new PublicKey(marketConfig.programId),
+      keys: [
+        { pubkey: publicKey, isSigner: true, isWritable: true },
+        { pubkey: sellerPk, isSigner: false, isWritable: true },
+        { pubkey: new PublicKey(marketConfig.configPda), isSigner: false, isWritable: false },
+        { pubkey: listingPda, isSigner: false, isWritable: true },
+        { pubkey: vaultPda, isSigner: false, isWritable: true },
+        { pubkey: buyerNftAtaResult.ata, isSigner: false, isWritable: true },
+        { pubkey: buyerUsdcAtaResult.ata, isSigner: false, isWritable: true },
+        { pubkey: sellerUsdcAta, isSigner: false, isWritable: true },
+        { pubkey: mint, isSigner: false, isWritable: false },
+        { pubkey: platformFeeAccount, isSigner: false, isWritable: true },
+        { pubkey: new PublicKey(marketConfig.usdcMint), isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: BUY_NFT_DISCRIMINATOR,
+    }),
+  );
 
-  return signAndSend(connection, provider, [instruction]);
+  return signAndSend(connection, provider, instructions);
 }
 
 export async function cancelNftListingWithPhantom({ nftMint }) {
