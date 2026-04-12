@@ -113,7 +113,27 @@ async function ensureAta({ connection, payer, owner, mint }) {
   return { ata, instruction };
 }
 
-export async function listNftWithPhantom({ nftMint, priceBaseUnits, quantity, listingNonce = BigInt(Date.now()) }) {
+async function resolveSellerTokenAccount({ mint, owner, sellerTokenAccount = null }) {
+  if (sellerTokenAccount) {
+    return new PublicKey(sellerTokenAccount);
+  }
+
+  return getAssociatedTokenAddress(
+    mint,
+    owner,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  );
+}
+
+export async function listNftWithPhantom({
+  nftMint,
+  priceBaseUnits,
+  quantity,
+  listingNonce = BigInt(Date.now()),
+  sellerTokenAccount = null,
+}) {
   const { provider, publicKey, marketConfig, connection } = await resolveContext();
   const seller = publicKey.toBase58();
   const mint = new PublicKey(nftMint);
@@ -123,7 +143,11 @@ export async function listNftWithPhantom({ nftMint, priceBaseUnits, quantity, li
     mint.toBase58(),
     listingNonce,
   );
-  const sellerNftAta = await getAssociatedTokenAddress(mint, publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+  const sellerNftAta = await resolveSellerTokenAccount({
+    mint,
+    owner: publicKey,
+    sellerTokenAccount,
+  });
 
   const instruction = new TransactionInstruction({
     programId: new PublicKey(marketConfig.programId),

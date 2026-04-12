@@ -52,7 +52,9 @@ function ensurePriceInputs(items) {
       priceInputs.value[item.mint] = item.listing?.price ? String(item.listing.price) : '';
     }
     if (!quantityInputs.value[item.mint]) {
-      quantityInputs.value[item.mint] = item.listing?.quantity ? String(item.listing.quantity) : String(item.quantity || 1);
+      quantityInputs.value[item.mint] = item.listing?.quantity
+        ? String(item.listing.quantity)
+        : String(item.maxListableQuantity || item.quantity || 1);
     }
   }
 }
@@ -137,16 +139,50 @@ function toWholeQuantity(quantityText) {
   return BigInt(value);
 }
 
+function pickSourceTokenAccount(item, quantity) {
+  const accounts = Array.isArray(item?.tokenAccounts) ? item.tokenAccounts : [];
+  if (accounts.length === 0) {
+    return item?.sourceTokenAccount || null;
+  }
+
+  const preferredAddress = String(item?.sourceTokenAccount || '').trim();
+  const matching = accounts
+    .filter((account) => {
+      try {
+        return BigInt(account?.quantity || 0) >= quantity;
+      } catch {
+        return false;
+      }
+    })
+    .sort((left, right) =>
+      Number(String(right?.address || '') === preferredAddress) - Number(String(left?.address || '') === preferredAddress) ||
+      Number(right?.quantity || 0) - Number(left?.quantity || 0),
+    );
+
+  if (matching[0]?.address) {
+    return matching[0].address;
+  }
+
+  const maxListableQuantity = Number(item?.maxListableQuantity || item?.sourceQuantity || 0);
+  if (maxListableQuantity > 0) {
+    throw new Error(`Ce mint est reparti sur plusieurs token accounts. Quantite max par listing direct: ${maxListableQuantity}.`);
+  }
+
+  throw new Error('Impossible d identifier le token account source pour ce mint.');
+}
+
 async function submitListing(item) {
   resetMessages();
   actionLoading.value = true;
   try {
     const priceBaseUnits = toBaseUnits(priceInputs.value[item.mint]);
     const quantity = toWholeQuantity(quantityInputs.value[item.mint]);
+    const sellerTokenAccount = pickSourceTokenAccount(item, quantity);
     const signature = await listNftWithPhantom({
       nftMint: item.mint,
       priceBaseUnits,
       quantity,
+      sellerTokenAccount,
     });
     success.value = `Listing cree: ${signature}`;
     await refreshAll();
@@ -263,6 +299,9 @@ onMounted(async () => {
                 <span class="muted">{{ item.manufacturer || item.category || 'Custom devnet' }} · {{ item.rarity || item.itemType || 'nft' }}</span>
                 <span class="muted">Quantite: {{ item.quantity || 1 }}</span>
                 <span class="muted">Mint: {{ shortAddress(item.mint) }}</span>
+                <span v-if="item.tokenAccounts?.length > 1" class="muted">
+                  Listing direct max: {{ item.maxListableQuantity || item.quantity || 1 }} (reparti sur {{ item.tokenAccounts.length }} comptes)
+                </span>
                 <span class="muted">
                   Star Atlas floor: {{ formatPrice(item.market?.floor, item.market?.floorQuoteSymbol || 'USDC') }}
                 </span>

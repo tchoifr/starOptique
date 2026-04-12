@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { getItemsCatalog } from './catalogService.js';
 
 const TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+const ASSOCIATED_TOKEN_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
 const LISTING_ACCOUNT_SIZE = 130;
 const LISTING_STATUS_ACTIVE = 0;
 const LISTING_DISCRIMINATOR = Uint8Array.from([88, 16, 97, 53, 198, 205, 24, 41]);
@@ -133,10 +134,23 @@ function toPrice(baseUnits, decimals = 6) {
   return Number((baseUnits / (10 ** decimals)).toFixed(decimals));
 }
 
-function normalizeWalletNfts(tokenAccounts, itemsByMint, activeListingsBySellerMint) {
+function deriveAssociatedTokenAddress(owner, mint) {
+  try {
+    return PublicKey.findProgramAddressSync([
+      new PublicKey(owner).toBuffer(),
+      new PublicKey(TOKEN_PROGRAM_ID).toBuffer(),
+      new PublicKey(mint).toBuffer(),
+    ], new PublicKey(ASSOCIATED_TOKEN_PROGRAM_ID))[0].toBase58();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWalletNfts(owner, tokenAccounts, itemsByMint, activeListingsBySellerMint) {
   const aggregated = new Map();
 
   for (const account of Array.isArray(tokenAccounts) ? tokenAccounts : []) {
+    const tokenAccountAddress = typeof account?.pubkey === 'string' ? account.pubkey : null;
     const parsed = account?.account?.data?.parsed?.info;
     const mint = parsed?.mint;
     const tokenAmount = parsed?.tokenAmount;
@@ -144,20 +158,45 @@ function normalizeWalletNfts(tokenAccounts, itemsByMint, activeListingsBySellerM
     const decimals = Number(tokenAmount?.decimals || 0);
 
     if (typeof mint !== 'string' || !mint.trim()) continue;
+    if (typeof tokenAccountAddress !== 'string' || !tokenAccountAddress.trim()) continue;
     if (amount < 1 || decimals !== 0) continue;
 
-    aggregated.set(mint, (aggregated.get(mint) || 0) + amount);
+    const current = aggregated.get(mint) || { quantity: 0, tokenAccounts: [] };
+    current.quantity += amount;
+    current.tokenAccounts.push({ address: tokenAccountAddress, quantity: amount });
+    aggregated.set(mint, current);
   }
 
   const items = [];
 
-  for (const [mint, quantity] of aggregated.entries()) {
+  for (const [mint, aggregate] of aggregated.entries()) {
+    const quantity = aggregate.quantity;
     const item = itemsByMint.get(mint) || null;
     const listing = activeListingsBySellerMint.get(mint) || null;
+    const associatedTokenAccount = deriveAssociatedTokenAddress(owner, mint);
+    const tokenAccounts = aggregate.tokenAccounts
+      .map((entry) => ({
+        ...entry,
+        isAssociated: associatedTokenAccount === entry.address,
+      }))
+      .sort((left, right) =>
+        Number(right.isAssociated) - Number(left.isAssociated) ||
+        right.quantity - left.quantity ||
+        left.address.localeCompare(right.address),
+      );
+    const preferredSource = tokenAccounts[0] || null;
+    const maxListableQuantity = tokenAccounts.reduce(
+      (max, entry) => Math.max(max, entry.quantity || 0),
+      0,
+    );
 
     items.push({
       mint,
       quantity,
+      tokenAccounts,
+      sourceTokenAccount: preferredSource?.address || null,
+      sourceQuantity: preferredSource?.quantity || 0,
+      maxListableQuantity,
       name: item?.name || 'NFT inconnu',
       image: item?.image || '',
       description: item?.description || '',
@@ -275,7 +314,7 @@ async function getWalletNftsForRpc(walletAddress, rpcEndpoint) {
 
   return {
     wallet: owner,
-    items: normalizeWalletNfts(tokenAccounts, itemsByMint, activeListingsBySellerMint),
+    items: normalizeWalletNfts(owner, tokenAccounts, itemsByMint, activeListingsBySellerMint),
     partial: itemsResult.status !== 'fulfilled' || listingsResult.status !== 'fulfilled' || tokenAccountsResult.status !== 'fulfilled',
   };
 }
