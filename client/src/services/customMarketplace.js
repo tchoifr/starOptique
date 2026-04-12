@@ -4,6 +4,7 @@ import {
   createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddress,
 } from '@solana/spl-token';
+import bs58 from 'bs58';
 import {
   Connection,
   PublicKey,
@@ -82,7 +83,20 @@ async function signAndSend(connection, provider, instructions) {
   tx.recentBlockhash = latest.blockhash;
 
   const signed = await provider.signTransaction(tx);
-  const signature = await connection.sendRawTransaction(signed.serialize());
+  const rawTransaction = signed.serialize();
+  const signedSignature = signed.signature ? bs58.encode(signed.signature) : null;
+  let signature;
+
+  try {
+    signature = await connection.sendRawTransaction(rawTransaction);
+  } catch (error) {
+    const message = String(error?.message || '');
+    if (!message.includes('already been processed') || !signedSignature) {
+      throw error;
+    }
+    signature = signedSignature;
+  }
+
   await connection.confirmTransaction({ signature, ...latest }, 'confirmed');
   return signature;
 }
