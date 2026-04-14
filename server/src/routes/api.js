@@ -1,10 +1,16 @@
 import { Router } from 'express';
 import { getShipDetail, getShipsSummary, getSellersPage } from '../services/marketService.js';
 import {
+  confirmCustomMarketplaceCancel,
+  confirmCustomMarketplaceListing,
+  confirmCustomMarketplacePurchase,
   getCustomListings,
   getCustomMarketplaceConfigView,
   getDevnetWalletNfts,
   getWalletNfts,
+  prepareCustomMarketplaceCancel,
+  prepareCustomMarketplaceListing,
+  prepareCustomMarketplacePurchase,
 } from '../services/customMarketplaceService.js';
 
 export const apiRouter = Router();
@@ -56,6 +62,54 @@ apiRouter.get('/marketplace/listings', async (req, res, next) => {
   try {
     const owner = typeof req.query.owner === 'string' ? req.query.owner : null;
     res.json(await getCustomListings({ owner }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.post('/marketplace/listings/prepare', async (req, res, next) => {
+  try {
+    res.json(await prepareCustomMarketplaceListing(req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.post('/marketplace/listings/confirm', async (req, res, next) => {
+  try {
+    res.json(await confirmCustomMarketplaceListing(req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.post('/marketplace/cancel/prepare', async (req, res, next) => {
+  try {
+    res.json(await prepareCustomMarketplaceCancel(req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.post('/marketplace/cancel/confirm', async (req, res, next) => {
+  try {
+    res.json(await confirmCustomMarketplaceCancel(req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.post('/marketplace/purchase/prepare', async (req, res, next) => {
+  try {
+    res.json(await prepareCustomMarketplacePurchase(req.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+apiRouter.post('/marketplace/purchase/confirm', async (req, res, next) => {
+  try {
+    res.json(await confirmCustomMarketplacePurchase(req.body));
   } catch (error) {
     next(error);
   }

@@ -163,6 +163,9 @@ function toWholeQuantity(quantityText) {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error('Quantite invalide.');
   }
+  if (value !== 1) {
+    throw new Error('Ce programme minimal ne supporte qu un NFT par listing.');
+  }
   return BigInt(value);
 }
 

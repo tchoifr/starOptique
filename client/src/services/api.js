@@ -17,8 +17,27 @@ const API_BASE = resolveApiBase();
 
 async function request(path, init = undefined) {
   const response = await fetch(`${API_BASE}${path}`, init);
-  if (!response.ok) throw new Error(`API ${response.status}`);
+  if (!response.ok) {
+    let message = `API ${response.status}`;
+    try {
+      const payload = await response.json();
+      if (typeof payload?.error === 'string' && payload.error.trim()) {
+        message = payload.error;
+      }
+    } catch {
+      // Ignore non-JSON error responses and keep the HTTP fallback message.
+    }
+    throw new Error(message);
+  }
   return response.json();
+}
+
+function post(path, body) {
+  return request(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
 }
 
 export const api = {
@@ -37,6 +56,24 @@ export const api = {
   getMarketplaceListings(owner = '') {
     const suffix = owner ? `?owner=${encodeURIComponent(owner)}` : '';
     return request(`/marketplace/listings${suffix}`);
+  },
+  prepareMarketplaceListing(payload) {
+    return post('/marketplace/listings/prepare', payload);
+  },
+  confirmMarketplaceListing(payload) {
+    return post('/marketplace/listings/confirm', payload);
+  },
+  prepareMarketplaceCancel(payload) {
+    return post('/marketplace/cancel/prepare', payload);
+  },
+  confirmMarketplaceCancel(payload) {
+    return post('/marketplace/cancel/confirm', payload);
+  },
+  prepareMarketplacePurchase(payload) {
+    return post('/marketplace/purchase/prepare', payload);
+  },
+  confirmMarketplacePurchase(payload) {
+    return post('/marketplace/purchase/confirm', payload);
   },
   getWalletNfts(address) {
     return request(`/wallet/${encodeURIComponent(address)}/nfts`);

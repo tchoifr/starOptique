@@ -1,0 +1,19 @@
+[toolchain]
+anchor_version = "0.30.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+byhnex_vault_nft = "4CQ2KzmEvWw4m6acrzNUNz33Tf1KWfzJ5GR2gzCGcxJ1"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run mocha -t 1000000 tests/"

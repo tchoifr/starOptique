@@ -1,0 +1,28 @@
+[package]
+name = "byhnex_vault_nft"
+version = "0.1.0"
+description = "Minimal NFT vault marketplace for StarVision"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "byhnex_vault_nft"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = "0.30.1"
+anchor-spl = "0.30.1"
+
+borsh_v1 = { package = "borsh", version = "=1.5.1" }
+borsh_derive_v1 = { package = "borsh-derive", version = "=1.5.7" }
+
+[build-dependencies]
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
+
