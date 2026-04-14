@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { api } from '../services/api.js';
-import { connectPhantom, disconnectPhantom } from '../services/phantom.js';
+import { connectPhantom, disconnectPhantom, getPhantomProvider } from '../services/phantom.js';
 import {
   buyNftWithPhantom,
   cancelNftListingWithPhantom,
@@ -20,6 +20,8 @@ const walletLoading = ref(false);
 const actionLoading = ref(false);
 const priceInputs = ref({});
 const quantityInputs = ref({});
+let phantomAccountChangedHandler = null;
+let phantomDisconnectHandler = null;
 
 const myListings = computed(() => listings.value.filter((row) => row.seller === wallet.value));
 const publicListings = computed(() => listings.value.filter((row) => row.seller !== wallet.value));
@@ -87,10 +89,35 @@ async function loadWalletInventories() {
   }
 }
 
+async function syncWalletFromProvider({ reloadInventories = false } = {}) {
+  const provider = getPhantomProvider();
+  const nextWallet = provider?.publicKey?.toBase58?.() || '';
+  const previousWallet = wallet.value;
+
+  if (nextWallet === previousWallet) {
+    if (reloadInventories && nextWallet) {
+      await loadWalletInventories();
+    }
+    return nextWallet;
+  }
+
+  wallet.value = nextWallet;
+
+  if (!nextWallet) {
+    walletItems.value = [];
+    devnetWalletItems.value = [];
+    return '';
+  }
+
+  await loadWalletInventories();
+  return nextWallet;
+}
+
 async function refreshAll() {
   loading.value = true;
   try {
     marketConfig.value = await api.getMarketplaceConfig();
+    await syncWalletFromProvider();
     await loadListings();
     if (wallet.value) {
       await loadWalletInventories();
@@ -175,6 +202,7 @@ async function submitListing(item) {
   resetMessages();
   actionLoading.value = true;
   try {
+    await syncWalletFromProvider();
     const priceBaseUnits = toBaseUnits(priceInputs.value[item.mint]);
     const quantity = toWholeQuantity(quantityInputs.value[item.mint]);
     const sellerTokenAccount = pickSourceTokenAccount(item, quantity);
@@ -197,10 +225,12 @@ async function cancelListing(row) {
   resetMessages();
   actionLoading.value = true;
   try {
+    await syncWalletFromProvider();
     const signature = await cancelNftListingWithPhantom({
       nftMint: row.shipMint,
       listing: row.listing,
       vault: row.vault,
+      quantity: row.quantity,
     });
     success.value = `Listing annule: ${signature}`;
     await refreshAll();
@@ -215,11 +245,14 @@ async function buyListing(row) {
   resetMessages();
   actionLoading.value = true;
   try {
+    await syncWalletFromProvider();
     const signature = await buyNftWithPhantom({
       nftMint: row.shipMint,
       seller: row.seller,
       listing: row.listing,
       vault: row.vault,
+      priceBaseUnits: row.priceBaseUnits,
+      quantity: row.quantity,
     });
     success.value = `Achat confirme: ${signature}`;
     await refreshAll();
@@ -231,8 +264,42 @@ async function buyListing(row) {
 }
 
 onMounted(async () => {
+  const provider = getPhantomProvider();
+
+  if (provider?.on) {
+    phantomAccountChangedHandler = async (publicKey) => {
+      wallet.value = publicKey?.toBase58?.() || '';
+      if (!wallet.value) {
+        walletItems.value = [];
+        devnetWalletItems.value = [];
+        return;
+      }
+      await refreshAll();
+    };
+
+    phantomDisconnectHandler = () => {
+      wallet.value = '';
+      walletItems.value = [];
+      devnetWalletItems.value = [];
+      resetMessages();
+    };
+
+    provider.on('accountChanged', phantomAccountChangedHandler);
+    provider.on('disconnect', phantomDisconnectHandler);
+  }
+
   await refreshAll();
   await connectWallet({ silent: true });
+});
+
+onBeforeUnmount(() => {
+  const provider = getPhantomProvider();
+  if (provider?.off && phantomAccountChangedHandler) {
+    provider.off('accountChanged', phantomAccountChangedHandler);
+  }
+  if (provider?.off && phantomDisconnectHandler) {
+    provider.off('disconnect', phantomDisconnectHandler);
+  }
 });
 </script>
 

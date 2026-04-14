@@ -2,6 +2,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
   getAssociatedTokenAddress,
 } from '@solana/spl-token';
 import bs58 from 'bs58';
@@ -17,9 +18,15 @@ import { api } from './api.js';
 import { connectPhantom } from './phantom.js';
 
 const textEncoder = new TextEncoder();
-const LIST_NFT_DISCRIMINATOR = Uint8Array.from([88, 221, 93, 166, 63, 220, 106, 232]);
-const BUY_NFT_DISCRIMINATOR = Uint8Array.from([96, 0, 28, 190, 49, 107, 83, 222]);
-const CANCEL_NFT_LISTING_DISCRIMINATOR = Uint8Array.from([146, 116, 90, 64, 207, 127, 251, 28]);
+const PREPARE_LIST_NFT_DISCRIMINATOR = Uint8Array.from([35, 214, 106, 153, 248, 118, 244, 222]);
+const FINALIZE_LIST_NFT_DISCRIMINATOR = Uint8Array.from([64, 9, 0, 144, 204, 203, 72, 180]);
+const PREPARE_BUY_NFT_DISCRIMINATOR = Uint8Array.from([28, 238, 76, 162, 81, 137, 48, 141]);
+const FINALIZE_BUY_NFT_DISCRIMINATOR = Uint8Array.from([206, 31, 84, 174, 58, 237, 178, 173]);
+const PREPARE_CANCEL_NFT_LISTING_DISCRIMINATOR = Uint8Array.from([191, 66, 14, 20, 41, 170, 157, 25]);
+const FINALIZE_CANCEL_NFT_LISTING_DISCRIMINATOR = Uint8Array.from([56, 66, 126, 229, 204, 252, 192, 182]);
+const SYSVAR_INSTRUCTIONS_PUBKEY = new PublicKey('Sysvar1nstructions1111111111111111111111111');
+const USDC_DECIMALS = 6;
+const NFT_DECIMALS = 0;
 
 function concatBytes(...arrays) {
   const length = arrays.reduce((sum, bytes) => sum + bytes.length, 0);
@@ -39,6 +46,12 @@ function encodeU64(value) {
   const view = new DataView(bytes.buffer);
   view.setBigUint64(0, raw, true);
   return bytes;
+}
+
+function calculateFeeBaseUnits(amount, feeBps) {
+  const rawAmount = typeof amount === 'bigint' ? amount : BigInt(String(amount ?? '').trim());
+  const rawFeeBps = BigInt(String(feeBps ?? 0));
+  return (rawAmount * rawFeeBps) / 10000n;
 }
 
 function deriveListingPdas(programId, seller, nftMint, listingNonce) {
@@ -162,9 +175,10 @@ export async function listNftWithPhantom({
     owner: publicKey,
     sellerTokenAccount,
   });
+  const programId = new PublicKey(marketConfig.programId);
 
-  const instruction = new TransactionInstruction({
-    programId: new PublicKey(marketConfig.programId),
+  const prepareIx = new TransactionInstruction({
+    programId,
     keys: [
       { pubkey: publicKey, isSigner: true, isWritable: true },
       { pubkey: listingPda, isSigner: false, isWritable: true },
@@ -176,22 +190,60 @@ export async function listNftWithPhantom({
       { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ],
     data: concatBytes(
-      LIST_NFT_DISCRIMINATOR,
+      PREPARE_LIST_NFT_DISCRIMINATOR,
       encodeU64(priceBaseUnits),
       encodeU64(quantity),
       encodeU64(listingNonce),
     ),
   });
 
-  return signAndSend(connection, provider, [instruction]);
+  const transferIx = createTransferCheckedInstruction(
+    sellerNftAta,
+    mint,
+    vaultPda,
+    publicKey,
+    quantity,
+    NFT_DECIMALS,
+    [],
+    TOKEN_PROGRAM_ID,
+  );
+
+  const finalizeIx = new TransactionInstruction({
+    programId,
+    keys: [
+      { pubkey: publicKey, isSigner: true, isWritable: true },
+      { pubkey: listingPda, isSigner: false, isWritable: true },
+      { pubkey: vaultPda, isSigner: false, isWritable: true },
+      { pubkey: sellerNftAta, isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: concatBytes(
+      FINALIZE_LIST_NFT_DISCRIMINATOR,
+      encodeU64(priceBaseUnits),
+      encodeU64(quantity),
+      encodeU64(listingNonce),
+    ),
+  });
+
+  return signAndSend(connection, provider, [prepareIx, transferIx, finalizeIx]);
 }
 
-export async function buyNftWithPhantom({ nftMint, seller, listing, vault }) {
+export async function buyNftWithPhantom({ nftMint, seller, listing, vault, priceBaseUnits, quantity }) {
   const { provider, publicKey, marketConfig, connection } = await resolveContext();
   const mint = new PublicKey(nftMint);
   const sellerPk = new PublicKey(seller);
   const listingPda = new PublicKey(listing);
   const vaultPda = new PublicKey(vault);
+  const grossPrice = typeof priceBaseUnits === 'bigint'
+    ? priceBaseUnits
+    : BigInt(String(priceBaseUnits ?? '').trim());
+  const listingQuantity = typeof quantity === 'bigint'
+    ? quantity
+    : BigInt(String(quantity ?? '').trim());
+  const feeAmount = calculateFeeBaseUnits(grossPrice, marketConfig.platformFeeBps ?? 0);
+  const sellerAmount = grossPrice - feeAmount;
 
   const buyerNftAtaResult = await ensureAta({
     connection,
@@ -205,68 +257,169 @@ export async function buyNftWithPhantom({ nftMint, seller, listing, vault }) {
     owner: publicKey,
     mint: marketConfig.usdcMint,
   });
-  const sellerUsdcAta = await getAssociatedTokenAddress(
-    new PublicKey(marketConfig.usdcMint),
-    sellerPk,
-    false,
-    TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  );
-  const platformFeeAccount = await getAssociatedTokenAddress(
-    new PublicKey(marketConfig.usdcMint),
-    new PublicKey(marketConfig.treasury),
-    false,
-    TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  );
+  const sellerUsdcAtaResult = await ensureAta({
+    connection,
+    payer: publicKey,
+    owner: sellerPk,
+    mint: marketConfig.usdcMint,
+  });
+  const platformFeeAtaResult = await ensureAta({
+    connection,
+    payer: publicKey,
+    owner: new PublicKey(marketConfig.treasury),
+    mint: marketConfig.usdcMint,
+  });
 
   const instructions = [];
   if (buyerNftAtaResult.instruction) instructions.push(buyerNftAtaResult.instruction);
   if (buyerUsdcAtaResult.instruction) instructions.push(buyerUsdcAtaResult.instruction);
+  if (sellerUsdcAtaResult.instruction) instructions.push(sellerUsdcAtaResult.instruction);
+  if (platformFeeAtaResult.instruction) instructions.push(platformFeeAtaResult.instruction);
+
+  if (sellerAmount > 0n) {
+    instructions.push(
+      createTransferCheckedInstruction(
+        buyerUsdcAtaResult.ata,
+        new PublicKey(marketConfig.usdcMint),
+        sellerUsdcAtaResult.ata,
+        publicKey,
+        sellerAmount,
+        USDC_DECIMALS,
+        [],
+        TOKEN_PROGRAM_ID,
+      ),
+    );
+  }
+
+  if (feeAmount > 0n) {
+    instructions.push(
+      createTransferCheckedInstruction(
+        buyerUsdcAtaResult.ata,
+        new PublicKey(marketConfig.usdcMint),
+        platformFeeAtaResult.ata,
+        publicKey,
+        feeAmount,
+        USDC_DECIMALS,
+        [],
+        TOKEN_PROGRAM_ID,
+      ),
+    );
+  }
+
+  instructions.push(
+    new TransactionInstruction({
+      programId: new PublicKey(marketConfig.programId),
+      keys: [
+        { pubkey: publicKey, isSigner: true, isWritable: true },
+        { pubkey: sellerPk, isSigner: false, isWritable: false },
+        { pubkey: new PublicKey(marketConfig.configPda), isSigner: false, isWritable: false },
+        { pubkey: listingPda, isSigner: false, isWritable: true },
+        { pubkey: vaultPda, isSigner: false, isWritable: true },
+        { pubkey: buyerUsdcAtaResult.ata, isSigner: false, isWritable: true },
+        { pubkey: sellerUsdcAtaResult.ata, isSigner: false, isWritable: true },
+        { pubkey: mint, isSigner: false, isWritable: false },
+        { pubkey: platformFeeAtaResult.ata, isSigner: false, isWritable: true },
+        { pubkey: new PublicKey(marketConfig.usdcMint), isSigner: false, isWritable: false },
+        { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      ],
+      data: PREPARE_BUY_NFT_DISCRIMINATOR,
+    }),
+  );
+
+  instructions.push(
+    createTransferCheckedInstruction(
+      vaultPda,
+      mint,
+      buyerNftAtaResult.ata,
+      publicKey,
+      listingQuantity,
+      NFT_DECIMALS,
+      [],
+      TOKEN_PROGRAM_ID,
+    ),
+  );
+
   instructions.push(
     new TransactionInstruction({
       programId: new PublicKey(marketConfig.programId),
       keys: [
         { pubkey: publicKey, isSigner: true, isWritable: true },
         { pubkey: sellerPk, isSigner: false, isWritable: true },
-        { pubkey: new PublicKey(marketConfig.configPda), isSigner: false, isWritable: false },
         { pubkey: listingPda, isSigner: false, isWritable: true },
         { pubkey: vaultPda, isSigner: false, isWritable: true },
         { pubkey: buyerNftAtaResult.ata, isSigner: false, isWritable: true },
-        { pubkey: buyerUsdcAtaResult.ata, isSigner: false, isWritable: true },
-        { pubkey: sellerUsdcAta, isSigner: false, isWritable: true },
         { pubkey: mint, isSigner: false, isWritable: false },
-        { pubkey: platformFeeAccount, isSigner: false, isWritable: true },
-        { pubkey: new PublicKey(marketConfig.usdcMint), isSigner: false, isWritable: false },
+        { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
         { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
-      data: BUY_NFT_DISCRIMINATOR,
+      data: FINALIZE_BUY_NFT_DISCRIMINATOR,
     }),
   );
 
   return signAndSend(connection, provider, instructions);
 }
 
-export async function cancelNftListingWithPhantom({ nftMint, listing, vault }) {
+export async function cancelNftListingWithPhantom({ nftMint, listing, vault, quantity }) {
   const { provider, publicKey, marketConfig, connection } = await resolveContext();
   const mint = new PublicKey(nftMint);
   const listingPda = new PublicKey(listing);
   const vaultPda = new PublicKey(vault);
-  const sellerNftAta = await getAssociatedTokenAddress(mint, publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
-
-  const instruction = new TransactionInstruction({
-    programId: new PublicKey(marketConfig.programId),
-    keys: [
-      { pubkey: publicKey, isSigner: true, isWritable: true },
-      { pubkey: listingPda, isSigner: false, isWritable: true },
-      { pubkey: vaultPda, isSigner: false, isWritable: true },
-      { pubkey: sellerNftAta, isSigner: false, isWritable: true },
-      { pubkey: mint, isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ],
-    data: CANCEL_NFT_LISTING_DISCRIMINATOR,
+  const listingQuantity = typeof quantity === 'bigint'
+    ? quantity
+    : BigInt(String(quantity ?? '').trim());
+  const sellerNftAtaResult = await ensureAta({
+    connection,
+    payer: publicKey,
+    owner: publicKey,
+    mint,
   });
 
-  return signAndSend(connection, provider, [instruction]);
+  const instructions = [];
+  if (sellerNftAtaResult.instruction) instructions.push(sellerNftAtaResult.instruction);
+
+  instructions.push(
+    new TransactionInstruction({
+      programId: new PublicKey(marketConfig.programId),
+      keys: [
+        { pubkey: publicKey, isSigner: true, isWritable: true },
+        { pubkey: listingPda, isSigner: false, isWritable: true },
+        { pubkey: vaultPda, isSigner: false, isWritable: true },
+        { pubkey: mint, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      ],
+      data: PREPARE_CANCEL_NFT_LISTING_DISCRIMINATOR,
+    }),
+  );
+
+  instructions.push(
+    createTransferCheckedInstruction(
+      vaultPda,
+      mint,
+      sellerNftAtaResult.ata,
+      publicKey,
+      listingQuantity,
+      NFT_DECIMALS,
+      [],
+      TOKEN_PROGRAM_ID,
+    ),
+  );
+
+  instructions.push(
+    new TransactionInstruction({
+      programId: new PublicKey(marketConfig.programId),
+      keys: [
+        { pubkey: publicKey, isSigner: true, isWritable: true },
+        { pubkey: listingPda, isSigner: false, isWritable: true },
+        { pubkey: vaultPda, isSigner: false, isWritable: true },
+        { pubkey: sellerNftAtaResult.ata, isSigner: false, isWritable: true },
+        { pubkey: mint, isSigner: false, isWritable: false },
+        { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      ],
+      data: FINALIZE_CANCEL_NFT_LISTING_DISCRIMINATOR,
+    }),
+  );
+
+  return signAndSend(connection, provider, instructions);
 }
