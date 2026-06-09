@@ -78,7 +78,4 @@ export const api = {
   getWalletNfts(address) {
     return request(`/wallet/${encodeURIComponent(address)}/nfts`);
   },
-  getDevnetWalletNfts(address) {
-    return request(`/wallet/${encodeURIComponent(address)}/devnet-nfts`);
-  },
 };

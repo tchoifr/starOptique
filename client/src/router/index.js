@@ -6,6 +6,12 @@ import MarketplaceView from '../views/MarketplaceView.vue';
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to) {
+    if (to.hash) {
+      return { el: to.hash, behavior: 'smooth' };
+    }
+    return { top: 0 };
+  },
   routes: [
     { path: '/', name: 'home', component: HomeView },
     { path: '/ships/:mint', name: 'ship', component: ShipView, props: true },

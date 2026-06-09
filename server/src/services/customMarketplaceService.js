@@ -545,10 +545,6 @@ export async function getWalletNfts(walletAddress) {
   return getWalletNftsForRpc(walletAddress, config.walletNftsRpcEndpoint);
 }
 
-export async function getDevnetWalletNfts(walletAddress) {
-  return getWalletNftsForRpc(walletAddress, config.customMarketplaceRpcEndpoint);
-}
-
 export async function prepareCustomMarketplaceListing(payload) {
   const cfg = buildStaticMarketplaceConfig();
   const seller = normalizeWalletAddress(payload?.seller);

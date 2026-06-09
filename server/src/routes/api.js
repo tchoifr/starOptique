@@ -6,7 +6,6 @@ import {
   confirmCustomMarketplacePurchase,
   getCustomListings,
   getCustomMarketplaceConfigView,
-  getDevnetWalletNfts,
   getWalletNfts,
   prepareCustomMarketplaceCancel,
   prepareCustomMarketplaceListing,
@@ -118,14 +117,6 @@ apiRouter.post('/marketplace/purchase/confirm', async (req, res, next) => {
 apiRouter.get('/wallet/:address/nfts', async (req, res, next) => {
   try {
     res.json(await getWalletNfts(req.params.address));
-  } catch (error) {
-    next(error);
-  }
-});
-
-apiRouter.get('/wallet/:address/devnet-nfts', async (req, res, next) => {
-  try {
-    res.json(await getDevnetWalletNfts(req.params.address));
   } catch (error) {
     next(error);
   }
