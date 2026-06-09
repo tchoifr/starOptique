@@ -111,6 +111,7 @@ onBeforeUnmount(() => {
           <p class="muted">Liste des offres USDC triée du prix le plus bas au plus haut, avec option pour ne garder que le vendeur le moins cher par navire.</p>
         </div>
         <div class="marketplace-actions-bar">
+          <router-link class="badge-button linklike" to="/">Catalogue Star Atlas</router-link>
           <router-link class="badge-button linklike" to="/marketplace">Mon marketplace</router-link>
           <button type="button" class="badge-button linklike" @click="goBack">Retour détail</button>
         </div>

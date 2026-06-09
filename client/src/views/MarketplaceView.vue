@@ -215,6 +215,7 @@ onBeforeUnmount(() => {
           </p>
         </div>
         <div class="marketplace-actions-bar">
+          <router-link class="badge-button linklike" to="/">Catalogue Star Atlas</router-link>
           <router-link class="badge-button linklike" to="/orders/sellers">Ordres Star Atlas</router-link>
           <button v-if="!wallet" type="button" class="badge-button" @click="connectWallet()">Connecter Phantom</button>
           <button v-else type="button" class="badge-button" @click="disconnectWalletAction">{{ shortAddress(wallet) }}</button>

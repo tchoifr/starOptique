@@ -1,9 +1,10 @@
 <script setup>
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../services/api.js';
 
 const router = useRouter();
+const error = ref('');
 
 onMounted(async () => {
   try {
@@ -13,13 +14,15 @@ onMounted(async () => {
       router.replace({ name: 'ship', params: { mint: first.mint } });
       return;
     }
-  } catch {
+    error.value = 'Aucun vaisseau disponible.';
+  } catch (err) {
+    error.value = err.message || 'Impossible de charger le catalogue Star Atlas.';
   }
-
-  router.replace({ name: 'sellers' });
 });
 </script>
 
 <template>
-  <main class="loading-view">Chargement du catalogue…</main>
+  <main class="loading-view" :class="{ error }">
+    {{ error || 'Chargement du catalogue…' }}
+  </main>
 </template>
