@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { api } from '../services/api.js';
 import SidebarNav from '../components/SidebarNav.vue';
 import OrdersPanel from '../components/OrdersPanel.vue';
+import headerImage from '../assets/starvisionHeader.png';
 
 const route = useRoute();
 const router = useRouter();
@@ -97,58 +98,66 @@ watch(() => [route.params.mint, route.query.sort], load, { immediate: true });
 </script>
 
 <template>
-  <main class="app-shell">
-    <div v-if="loading" class="loading-view">Chargement…</div>
-    <div v-else-if="error" class="loading-view error">{{ error }}</div>
-    <section v-else class="market-layout refined-layout">
-      <SidebarNav
-        :grouped-ships="data.groupedShips"
-        :current-mint="data.ship.mint"
-        :selected-sort="selectedSort"
-        @change-sort="changeSort"
-      />
+  <main class="catalog-page">
+    <section class="starvision-catalog-header" aria-label="StarVision">
+      <img :src="headerImage" alt="StarVision" class="starvision-catalog-image" />
+      <div class="starvision-catalog-shade"></div>
+      <a class="starvision-catalog-action" href="#starvision-catalogue">Voir le catalogue</a>
+    </section>
 
-      <section class="market-stage refined-stage">
-        <div class="panel hero-panel refined-panel">
-          <p class="breadcrumb">MAISON / NAVIRES / {{ formatSize(data.ship.size).toUpperCase() }} / {{ data.ship.name.toUpperCase() }}</p>
-          <div class="hero-card compact-hero official-hero-card">
-            <img :src="data.ship.image" :alt="data.ship.name" class="hero-image" />
-            <div class="hero-overlay official-hero-overlay"></div>
-            <div class="hero-body official-hero-body">
-              <div class="hero-copy-wrap official-copy-wrap">
-                <h2>{{ data.ship.name }}</h2>
-                <p class="hero-subtitle">{{ formatSubtitle(data.ship) }}</p>
-                <div class="marketplace-actions-bar">
-                  <router-link class="badge-button linklike" to="/marketplace">Ouvrir mon marketplace</router-link>
+    <div id="starvision-catalogue" class="app-shell catalog-content">
+      <div v-if="loading" class="loading-view">Chargement…</div>
+      <div v-else-if="error" class="loading-view error">{{ error }}</div>
+      <section v-else class="market-layout refined-layout">
+        <SidebarNav
+          :grouped-ships="data.groupedShips"
+          :current-mint="data.ship.mint"
+          :selected-sort="selectedSort"
+          @change-sort="changeSort"
+        />
+
+        <section class="market-stage refined-stage">
+          <div class="panel hero-panel refined-panel">
+            <p class="breadcrumb">MAISON / NAVIRES / {{ formatSize(data.ship.size).toUpperCase() }} / {{ data.ship.name.toUpperCase() }}</p>
+            <div class="hero-card compact-hero official-hero-card">
+              <img :src="data.ship.image" :alt="data.ship.name" class="hero-image" />
+              <div class="hero-overlay official-hero-overlay"></div>
+              <div class="hero-body official-hero-body">
+                <div class="hero-copy-wrap official-copy-wrap">
+                  <h2>{{ data.ship.name }}</h2>
+                  <p class="hero-subtitle">{{ formatSubtitle(data.ship) }}</p>
+                  <div class="marketplace-actions-bar">
+                    <router-link class="badge-button linklike" to="/marketplace">Ouvrir mon marketplace</router-link>
+                  </div>
                 </div>
+
+                <div class="hero-metadata-row">
+                  <div class="hero-meta-item">
+                    <span>Rareté</span>
+                    <strong class="rarity-badge" :data-rarity="data.ship.rarity">{{ formatRarity(data.ship.rarity) }}</strong>
+                  </div>
+                  <div class="hero-meta-item">
+                    <span>Classe</span>
+                    <strong>{{ formatSize(data.ship.size) }}</strong>
+                  </div>
+                  <div class="hero-meta-item">
+                    <span>Prix d'origine</span>
+                    <strong>{{ formatOriginalPrice(data.ship) }}</strong>
+                  </div>
+                  <div class="hero-meta-item">
+                    <span>Équipage</span>
+                    <strong>{{ data.ship.crew ?? '—' }}</strong>
+                  </div>
+                </div>
+
+                <p v-if="data.ship.description" class="hero-description">{{ data.ship.description }}</p>
               </div>
-
-              <div class="hero-metadata-row">
-                <div class="hero-meta-item">
-                  <span>Rareté</span>
-                  <strong class="rarity-badge" :data-rarity="data.ship.rarity">{{ formatRarity(data.ship.rarity) }}</strong>
-                </div>
-                <div class="hero-meta-item">
-                  <span>Classe</span>
-                  <strong>{{ formatSize(data.ship.size) }}</strong>
-                </div>
-                <div class="hero-meta-item">
-                  <span>Prix d'origine</span>
-                  <strong>{{ formatOriginalPrice(data.ship) }}</strong>
-                </div>
-                <div class="hero-meta-item">
-                  <span>Équipage</span>
-                  <strong>{{ data.ship.crew ?? '—' }}</strong>
-                </div>
-              </div>
-
-              <p v-if="data.ship.description" class="hero-description">{{ data.ship.description }}</p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <OrdersPanel :ship-name="data.ship.name" :asks="data.ship.market.asks" :bids="data.ship.market.bids" />
-    </section>
+        <OrdersPanel :ship-name="data.ship.name" :asks="data.ship.market.asks" :bids="data.ship.market.bids" />
+      </section>
+    </div>
   </main>
 </template>

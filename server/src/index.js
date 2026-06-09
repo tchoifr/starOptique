@@ -5,14 +5,14 @@ import { fileURLToPath } from 'node:url';
 import { apiRouter } from './routes/api.js';
 import { config } from './config.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use('/api', apiRouter);
 
-const distPath = path.resolve(__dirname, '../../dist');
+const distPath = path.resolve(serverDir, '../../dist');
 app.use(express.static(distPath));
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();

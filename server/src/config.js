@@ -1,8 +1,8 @@
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, '../..');
+const projectRoot = process.env.PROJECT_ROOT
+  ? path.resolve(process.env.PROJECT_ROOT)
+  : process.cwd();
 const legacyRoot = path.resolve(projectRoot, '../staratlas');
 
 export const config = {
