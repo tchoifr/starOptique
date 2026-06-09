@@ -808,12 +808,15 @@ body {
 }
 
 .starvision-header-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 25% center;
+     position: absolute;
+    top: -100px;
+    right: 0;
+    bottom: 0px;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: 25% center;
 }
 
 .starvision-header-shade {
