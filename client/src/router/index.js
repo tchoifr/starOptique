@@ -1,22 +1,30 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import HomeView from '../views/HomeView.vue';
-import ShipView from '../views/ShipView.vue';
-import SellersView from '../views/SellersView.vue';
 import MarketplaceView from '../views/MarketplaceView.vue';
 
 const router = createRouter({
   history: createWebHistory(),
   scrollBehavior(to) {
     if (to.hash) {
-      return { el: to.hash, behavior: 'smooth' };
+      return { el: to.hash };
     }
     return { top: 0 };
   },
   routes: [
-    { path: '/', name: 'home', component: HomeView },
-    { path: '/ships/:mint', name: 'ship', component: ShipView, props: true },
-    { path: '/orders/sellers', name: 'sellers', component: SellersView },
-    { path: '/marketplace', name: 'marketplace', component: MarketplaceView },
+    { path: '/', name: 'home', component: MarketplaceView, alias: '/marketplace' },
+    {
+      path: '/ships/:mint',
+      name: 'ship',
+      redirect: (to) => ({
+        path: '/',
+        query: { ship: to.params.mint },
+        hash: '#marketplace',
+      }),
+    },
+    {
+      path: '/orders/sellers',
+      name: 'sellers',
+      redirect: { path: '/', hash: '#vendeurs' },
+    },
   ],
 });
 
