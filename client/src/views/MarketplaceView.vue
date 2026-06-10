@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import logoImage from '../assets/logo.png';
 import headerImage from '../assets/starvisionHeader.png';
+import headerMobileImage from '../assets/starvisionHeaderMobile.png';
+import headerTabletImage from '../assets/starvisionHeaderTablette.png';
 import { api } from '../services/api.js';
 import { connectPhantom, disconnectPhantom, getPhantomProvider } from '../services/phantom.js';
 import {
@@ -13,6 +15,7 @@ import {
 const route = useRoute();
 
 const PAGE_SIZE = 6;
+const SELLER_PAGE_SIZE = 12;
 
 const marketConfig = ref(null);
 const ships = ref([]);
@@ -24,6 +27,8 @@ const wallet = ref('');
 const walletItems = ref([]);
 const error = ref('');
 const success = ref('');
+const marketWarning = ref('');
+const walletWarning = ref('');
 const loading = ref(true);
 const shipLoading = ref(false);
 const walletLoading = ref(false);
@@ -36,6 +41,14 @@ const sortMode = ref('price');
 const sellersLowestOnly = ref(false);
 const activeBookTab = ref('orderbook');
 const page = ref(1);
+const sellerPage = ref(1);
+const sellerPagination = ref({
+  page: 1,
+  perPage: SELLER_PAGE_SIZE,
+  total: 0,
+  totalPages: 1,
+  hasNextPage: false,
+});
 let phantomAccountChangedHandler = null;
 let phantomDisconnectHandler = null;
 
@@ -111,6 +124,11 @@ function resetMessages() {
   success.value = '';
 }
 
+function resetWarnings() {
+  marketWarning.value = '';
+  walletWarning.value = '';
+}
+
 const walletUnits = computed(() => walletItems.value.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0));
 const myListings = computed(() => listings.value.filter((row) => row.seller === wallet.value));
 const publicListings = computed(() => listings.value.filter((row) => row.seller !== wallet.value));
@@ -167,7 +185,7 @@ const visibleShips = computed(() => {
 const sellerTableRows = computed(() => {
   const shipByMint = new Map(ships.value.map((ship) => [ship.mint, ship]));
 
-  const customRows = publicListings.value.map((row) => ({
+  const customRows = sellerPage.value === 1 ? publicListings.value.map((row) => ({
     key: `custom-${row.listing}`,
     source: 'custom',
     raw: row,
@@ -180,7 +198,7 @@ const sellerTableRows = computed(() => {
     quoteSymbol: row.quoteSymbol || 'USDC',
     quantity: row.quantity || 1,
     buyable: true,
-  }));
+  })) : [];
 
   const externalRows = sellerRows.value.map((row) => ({
     key: `external-${row.shipMint}-${row.owner}-${row.price}-${row.createdAtIso}`,
@@ -199,9 +217,12 @@ const sellerTableRows = computed(() => {
 
   return [...customRows, ...externalRows]
     .sort((left, right) => (left.price ?? Number.MAX_SAFE_INTEGER) - (right.price ?? Number.MAX_SAFE_INTEGER))
-    .slice(0, 12);
+    .slice(0, SELLER_PAGE_SIZE);
 });
 
+const sellerTotalPages = computed(() => Math.max(1, Number(sellerPagination.value.totalPages) || 1));
+const currentSellerPage = computed(() => Math.min(sellerPage.value, sellerTotalPages.value));
+const sellerTotalRows = computed(() => Number(sellerPagination.value.total) || sellerTableRows.value.length);
 const selectedListing = computed(() => (selectedShip.value ? listingByMint.value.get(selectedShip.value.mint) : null));
 const selectedAsks = computed(() => selectedShip.value?.market?.asks || []);
 const selectedBids = computed(() => selectedShip.value?.market?.bids || []);
@@ -211,12 +232,26 @@ watch([search, classFilter, rarityFilter, makerFilter, sortMode], () => {
 });
 
 watch(sellersLowestOnly, () => {
-  loadSellerRows();
+  sellerPage.value = 1;
+  loadSellerRows(1);
 });
 
-async function loadSellerRows() {
-  const data = await api.getSellers(1, 24, sellersLowestOnly.value ? 'lowest-per-ship' : 'all');
-  sellerRows.value = data.rows || [];
+async function loadSellerRows(nextPage = sellerPage.value) {
+  try {
+    const data = await api.getSellers(nextPage, SELLER_PAGE_SIZE, sellersLowestOnly.value ? 'lowest-per-ship' : 'all');
+    sellerRows.value = data.rows || [];
+    sellerPagination.value = data.pagination || {
+      page: nextPage,
+      perPage: SELLER_PAGE_SIZE,
+      total: sellerRows.value.length,
+      totalPages: 1,
+      hasNextPage: false,
+    };
+    sellerPage.value = sellerPagination.value.page || nextPage;
+  } catch {
+    sellerRows.value = [];
+    marketWarning.value = 'Vendeurs Star Atlas indisponibles temporairement.';
+  }
 }
 
 async function loadShipDetail(mint) {
@@ -234,9 +269,14 @@ async function loadShipDetail(mint) {
 }
 
 async function loadListings() {
-  const data = await api.getMarketplaceListings();
-  listings.value = data.rows || [];
-  marketConfig.value = data.config || marketConfig.value;
+  try {
+    const data = await api.getMarketplaceListings();
+    listings.value = data.rows || [];
+    marketConfig.value = data.config || marketConfig.value;
+  } catch {
+    listings.value = [];
+    marketWarning.value = 'Listings custom indisponibles temporairement.';
+  }
 }
 
 async function loadWalletInventories() {
@@ -246,14 +286,15 @@ async function loadWalletInventories() {
   }
 
   walletLoading.value = true;
+  walletWarning.value = '';
   try {
     const mainnetData = await api.getWalletNfts(wallet.value);
     walletItems.value = mainnetData.items || [];
     if (mainnetData.partial) {
-      error.value = 'Inventaire charge partiellement.';
+      walletWarning.value = 'Inventaire charge partiellement.';
     }
   } catch (err) {
-    error.value = err.message || 'Impossible de rafraichir l inventaire du wallet.';
+    walletWarning.value = err.message || 'Impossible de rafraichir l inventaire du wallet.';
   } finally {
     walletLoading.value = false;
   }
@@ -285,6 +326,7 @@ async function syncWalletFromProvider({ reloadInventories = false } = {}) {
 async function refreshAll() {
   loading.value = true;
   resetMessages();
+  resetWarnings();
   try {
     const [configData, catalogData] = await Promise.all([
       api.getMarketplaceConfig(),
@@ -294,7 +336,7 @@ async function refreshAll() {
     marketConfig.value = configData;
     ships.value = catalogData.ships || [];
 
-    await Promise.all([
+    await Promise.allSettled([
       loadListings(),
       loadSellerRows(),
       syncWalletFromProvider(),
@@ -409,6 +451,13 @@ function goToPage(nextPage) {
   page.value = Math.min(Math.max(nextPage, 1), totalPages.value);
 }
 
+async function goToSellerPage(nextPage) {
+  const safePage = Math.min(Math.max(nextPage, 1), sellerTotalPages.value);
+  if (safePage === sellerPage.value) return;
+  sellerPage.value = safePage;
+  await loadSellerRows(safePage);
+}
+
 onMounted(async () => {
   const provider = getPhantomProvider();
 
@@ -450,15 +499,12 @@ onBeforeUnmount(() => {
 <template>
   <main class="sv-page">
     <section id="top" class="sv-landing-hero" aria-label="StarVision">
-      <img :src="headerImage" alt="StarVision" class="sv-landing-image" />
-      <div class="sv-landing-shade"></div>
+      <picture class="sv-landing-picture">
+        <source :srcset="headerMobileImage" media="(max-width: 640px)" />
+        <source :srcset="headerTabletImage" media="(max-width: 1024px)" />
+        <img :src="headerImage" alt="StarVision" class="sv-landing-image" />
+      </picture>
       <div class="sv-landing-content">
-        <a class="sv-landing-brand" href="#marketplace">
-          <img :src="logoImage" alt="" />
-          <span>StarVision</span>
-        </a>
-        <h1>StarVision</h1>
-        <p>Catalogue, orderbook, vendeurs et gestion wallet sur une seule page.</p>
         <div class="sv-landing-actions">
           <a href="#marketplace">Ouvrir le marketplace</a>
           <a href="#catalogue">Voir le catalogue</a>
@@ -567,7 +613,7 @@ onBeforeUnmount(() => {
         <footer class="sv-pagination">
           <span>Page {{ currentPage }} sur {{ totalPages }}</span>
           <button type="button" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">‹</button>
-          <button type="button" class="active">1</button>
+          <button type="button" class="active">{{ currentPage }}</button>
           <button type="button" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">›</button>
         </footer>
       </section>
@@ -675,6 +721,8 @@ onBeforeUnmount(() => {
         <p v-if="marketConfig" class="sv-program-line">
           Programme custom: {{ shortAddress(marketConfig.programId) }} · Fee {{ marketConfig.platformFeeBps / 100 }}%
         </p>
+        <p v-if="marketWarning" class="sv-message warning">{{ marketWarning }}</p>
+        <p v-if="walletWarning" class="sv-message warning">{{ walletWarning }}</p>
         <p v-if="success" class="sv-message success">{{ success }}</p>
         <p v-if="error" class="sv-message error">{{ error }}</p>
 
@@ -710,6 +758,14 @@ onBeforeUnmount(() => {
                 Acheter
               </button>
             </div>
+
+            <footer class="sv-pagination sv-seller-pagination">
+              <span>Page {{ currentSellerPage }} sur {{ sellerTotalPages }}</span>
+              <button type="button" :disabled="currentSellerPage <= 1" @click="goToSellerPage(currentSellerPage - 1)">‹</button>
+              <button type="button" class="active">{{ currentSellerPage }}</button>
+              <button type="button" :disabled="currentSellerPage >= sellerTotalPages" @click="goToSellerPage(currentSellerPage + 1)">›</button>
+              <span>{{ sellerTotalRows }} lignes</span>
+            </footer>
           </template>
         </div>
       </section>
@@ -725,6 +781,7 @@ onBeforeUnmount(() => {
             <button v-else type="button" class="sv-mini-action" @click="loadWalletInventories">Rafraichir</button>
           </header>
 
+          <p v-if="walletWarning" class="sv-message warning">{{ walletWarning }}</p>
           <div v-if="!wallet" class="sv-option-empty">Connecte Phantom pour afficher ton inventaire.</div>
           <div v-else-if="walletLoading" class="sv-option-empty">Chargement des NFTs mainnet...</div>
           <div v-else-if="walletItems.length === 0" class="sv-option-empty">Aucun NFT trouve sur ce wallet.</div>
@@ -794,9 +851,11 @@ onBeforeUnmount(() => {
 
           <div class="sv-transaction-list">
             <p v-if="actionLoading" class="sv-message">Transaction en cours...</p>
+            <p v-if="marketWarning" class="sv-message warning">{{ marketWarning }}</p>
+            <p v-if="walletWarning" class="sv-message warning">{{ walletWarning }}</p>
             <p v-if="success" class="sv-message success">{{ success }}</p>
             <p v-if="error" class="sv-message error">{{ error }}</p>
-            <p v-if="!actionLoading && !success && !error" class="sv-option-empty">Aucune transaction lancee dans cette session.</p>
+            <p v-if="!actionLoading && !success && !error && !marketWarning && !walletWarning" class="sv-option-empty">Aucune transaction lancee dans cette session.</p>
           </div>
         </article>
       </section>

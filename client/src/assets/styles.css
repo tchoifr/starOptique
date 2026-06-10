@@ -876,75 +876,38 @@ button { font: inherit; }
   background: #02070d;
 }
 
-.sv-landing-image {
+.sv-landing-picture {
   position: absolute;
   inset: 0;
+  display: block;
+}
+
+.sv-landing-image {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center;
-  opacity: 0.92;
-}
-
-.sv-landing-shade {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(2, 7, 13, 0.12) 0%, rgba(2, 7, 13, 0.18) 48%, #02070d 100%),
-    linear-gradient(90deg, rgba(2, 7, 13, 0.86) 0%, rgba(2, 7, 13, 0.36) 48%, rgba(2, 7, 13, 0.82) 100%);
+  opacity: 1;
 }
 
 .sv-landing-content {
   position: relative;
   z-index: 1;
   display: flex;
-  flex-direction: column;
   justify-content: flex-end;
+  align-items: flex-start;
   width: min(1120px, calc(100% - 40px));
   min-height: 100%;
   margin: 0 auto;
-  padding: 42px 0 max(52px, 8vh);
-}
-
-.sv-landing-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  width: max-content;
-  margin-bottom: 18px;
-  color: #ffffff;
-  font-weight: 700;
-}
-
-.sv-landing-brand img {
-  width: 34px;
-  height: 34px;
-  border-radius: 7px;
-  object-fit: cover;
-  box-shadow: 0 0 26px rgba(92, 228, 255, 0.4);
-}
-
-.sv-landing-content h1 {
-  margin: 0;
-  color: #ffffff;
-  font-size: clamp(3.2rem, 8vw, 7.2rem);
-  line-height: 0.9;
-  font-weight: 800;
-}
-
-.sv-landing-content p {
-  max-width: 640px;
-  margin: 18px 0 0;
-  color: rgba(230, 241, 255, 0.84);
-  font-size: clamp(1rem, 1.6vw, 1.25rem);
-  line-height: 1.45;
+  padding: 0 0 clamp(32px, 8vh, 72px);
 }
 
 .sv-landing-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 26px;
+  margin: 0;
 }
 
 .sv-landing-actions a {
@@ -1424,6 +1387,13 @@ button { font: inherit; }
   cursor: not-allowed;
 }
 
+.sv-seller-pagination {
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding: 10px 2px 0;
+  border-top: 1px solid rgba(36, 69, 101, 0.32);
+}
+
 .sv-detail-panel {
   padding: 16px;
 }
@@ -1641,6 +1611,11 @@ button { font: inherit; }
 
 .sv-message.success {
   color: var(--sv-green);
+}
+
+.sv-message.warning,
+.sv-option-empty.warning {
+  color: #ffb341;
 }
 
 .sv-message.error,

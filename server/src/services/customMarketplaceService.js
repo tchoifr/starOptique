@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import bs58 from 'bs58';
+import bs58Import from 'bs58';
 import { PublicKey } from '@solana/web3.js';
 import { config } from '../config.js';
 import { getItemsCatalog } from './catalogService.js';
@@ -10,9 +10,15 @@ const ASSOCIATED_TOKEN_PROGRAM_ID = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8kn
 const LISTING_ACCOUNT_SIZE = 73;
 const LISTING_DISCRIMINATOR = Uint8Array.from([88, 16, 97, 53, 198, 205, 24, 41]);
 const MAX_U64 = (1n << 64n) - 1n;
+const bs58 = bs58Import?.encode
+  ? bs58Import
+  : bs58Import?.default?.encode
+    ? bs58Import.default
+    : null;
 
 function base58Encode(bytes) {
   if (!(bytes instanceof Uint8Array)) return '';
+  if (typeof bs58?.encode !== 'function') return '';
   return bs58.encode(bytes);
 }
 
@@ -250,7 +256,8 @@ async function fetchListingAccount(listing, rpcEndpoint = config.customMarketpla
 }
 
 async function fetchListingAccounts() {
-  const bytes = bs58.encode(Buffer.from(LISTING_DISCRIMINATOR));
+  const bytes = base58Encode(Buffer.from(LISTING_DISCRIMINATOR));
+  if (!bytes) return [];
   const result = await callRpc(config.customMarketplaceRpcEndpoint, 'getProgramAccounts', [
     config.customMarketplaceProgramId,
     {
